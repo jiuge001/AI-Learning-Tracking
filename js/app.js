@@ -385,7 +385,10 @@
     <div class="card">
       <div class="card-header">
         <span class="card-title">❌ 错题详情</span>
-        <button class="btn btn-sm btn-outline" onclick="window._addErrorRow()">+ 添加错题</button>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-sm btn-outline" onclick="window._smartGrade()" id="btnSmartGrade">🔍 智能分析</button>
+          <button class="btn btn-sm btn-outline" onclick="window._addErrorRow()">+ 添加错题</button>
+        </div>
       </div>
       <div id="errorRows"></div>
     </div>
@@ -542,10 +545,11 @@
         reviewEl.style.display = 'block';
         var reviewHtml = '<div class="card"><div class="card-title">📋 识别结果预览</div>';
         reviewHtml += '<div style="max-height:300px;overflow-y:auto;font-size:12px;color:var(--text-secondary);background:var(--bg);padding:12px;border-radius:8px;margin-bottom:12px;white-space:pre-wrap">' + escapeHtml(ocrText.substring(0, 1000)) + (ocrText.length > 1000 ? '...' : '') + '</div>';
-        reviewHtml += '<div style="font-size:12px;margin-bottom:12px">检测到 <b>' + questions.length + '</b> 道题目，将自动填入错题表单</div>';
-        reviewHtml += '<div class="btn-group">';
-        reviewHtml += '<button class="btn btn-primary btn-sm" onclick="window._fillOCRResults()">✅ 填入错题表单</button>';
-        reviewHtml += '<button class="btn btn-outline btn-sm" onclick="document.getElementById(\'ocrReview\').style.display=\'none\'">取消</button>';
+        reviewHtml += '<div style="font-size:12px;margin-bottom:12px">检测到 <b>' + questions.length + '</b> 道题目</div>';
+        reviewHtml += '<div class="btn-group" style="flex-direction:column;gap:8px">';
+        reviewHtml += '<button class="btn btn-primary btn-sm btn-block" onclick="window._fillAndGrade()">✅ 智能批改并填入</button>';
+        reviewHtml += '<button class="btn btn-outline btn-sm btn-block" onclick="window._fillOCRResults()">📝 仅填入不批改</button>';
+        reviewHtml += '<button class="btn btn-outline btn-sm btn-block" onclick="document.getElementById(\'ocrReview\').style.display=\'none\'">取消</button>';
         reviewHtml += '</div></div>';
         reviewEl.innerHTML = reviewHtml;
 
@@ -562,40 +566,98 @@
     var questions = window._ocrQuestions;
     if (!questions || questions.length === 0) return;
 
-    var errorRows = document.getElementById('errorRows');
-    // 清空已有错题行
-    errorRows.innerHTML = '';
+    clearErrorRows();
+    var subject = document.getElementById('examSubject').value;
 
-    // 逐题添加
     questions.forEach(function(q, i) {
       window._addErrorRow();
-      var row = errorRows.lastElementChild;
+      var row = document.getElementById('errorRows').lastElementChild;
       if (!row) return;
-
-      var qnoEl = row.querySelector('[name="errQno"]');
-      var textEl = row.querySelector('[name="errText"]');
-      var wrongEl = row.querySelector('[name="errWrong"]');
-      var correctEl = row.querySelector('[name="errCorrect"]');
-      var topicEl = row.querySelector('[name="errTopic"]');
-      var typeEl = row.querySelector('[name="errType"]');
-
-      if (qnoEl) qnoEl.value = q.questionNo || (i + 1);
-      if (textEl) textEl.value = q.questionText || '';
-      if (wrongEl) wrongEl.value = q.wrongAnswer || '';
-      if (correctEl) correctEl.value = q.correctAnswer || '';
-      if (topicEl) topicEl.value = q.topic || '';
-      if (typeEl) typeEl.value = q.errorType || '计算错误';
+      fillErrorRow(row, q, i);
     });
 
-    // 自动尝试分析总分（如果OCR文本中有分数信息）
     tryAutoFillScore();
-
     document.getElementById('ocrReview').style.display = 'none';
     showToast('已填入 ' + questions.length + ' 道错题，请核对修改后保存', 'success');
-
-    // 滚动到错题区
     document.getElementById('errorRows').scrollIntoView({ behavior: 'smooth' });
   };
+
+  // 智能批改并填入
+  window._fillAndGrade = function() {
+    var questions = window._ocrQuestions;
+    if (!questions || questions.length === 0) return;
+
+    var subject = document.getElementById('examSubject').value;
+    var studentId = currentStudentId || 'qiyuan';
+    var student = DataManager.getStudent(studentId);
+    var grade = student ? student.grade : 3;
+
+    // 显示批改中
+    showToast('正在智能批改... 🔍', 'info');
+
+    // 运行自动批改
+    var graded = Grader.autoGrade(questions, subject, grade);
+
+    // 清空并填入
+    clearErrorRows();
+
+    graded.forEach(function(q, i) {
+      window._addErrorRow();
+      var row = document.getElementById('errorRows').lastElementChild;
+      if (!row) return;
+
+      // 填入基本信息
+      fillErrorRow(row, q, i);
+
+      // 填入批改结果
+      if (q.correctAnswer && q.correctAnswer !== '需手动批改') {
+        var correctEl = row.querySelector('[name="errCorrect"]');
+        if (correctEl) correctEl.value = q.correctAnswer;
+      }
+
+      // 填入错因分析（添加到行的下方）
+      if (q.analysis && q.analysis !== '答案正确！') {
+        var analysisDiv = document.createElement('div');
+        analysisDiv.style.cssText = 'margin-top:8px;padding:8px;background:#FFF7E6;border-radius:6px;font-size:12px;line-height:1.5';
+        analysisDiv.innerHTML = '<b>🔍 错因分析：</b>' + q.analysis + '<br><b>💡 建议：</b>' + (q.suggestion || '');
+        row.appendChild(analysisDiv);
+      }
+
+      // 如果答案正确，标绿
+      if (q.analysis === '答案正确！') {
+        row.style.borderLeftColor = 'var(--success)';
+        row.style.background = '#EDF9E8';
+      }
+    });
+
+    tryAutoFillScore();
+    document.getElementById('ocrReview').style.display = 'none';
+
+    // 统计
+    var correctCount = graded.filter(function(q) { return q.analysis === '答案正确！'; }).length;
+    var wrongCount = graded.length - correctCount;
+    showToast('批改完成：答错' + wrongCount + '题，答对' + correctCount + '题 ✅', 'success');
+
+    document.getElementById('errorRows').scrollIntoView({ behavior: 'smooth' });
+  };
+
+  function clearErrorRows() {
+    document.getElementById('errorRows').innerHTML = '';
+  }
+
+  function fillErrorRow(row, q, i) {
+    var qnoEl = row.querySelector('[name="errQno"]');
+    var textEl = row.querySelector('[name="errText"]');
+    var wrongEl = row.querySelector('[name="errWrong"]');
+    var topicEl = row.querySelector('[name="errTopic"]');
+    var typeEl = row.querySelector('[name="errType"]');
+
+    if (qnoEl) qnoEl.value = q.questionNo || (i + 1);
+    if (textEl) textEl.value = q.questionText || '';
+    if (wrongEl) wrongEl.value = q.wrongAnswer || '';
+    if (topicEl) topicEl.value = q.topic || '';
+    if (typeEl && q.errorType) typeEl.value = q.errorType;
+  }
 
   // 自动分析OCR文本中的分数
   function tryAutoFillScore() {
@@ -619,6 +681,89 @@
     div.textContent = text;
     return div.innerHTML;
   }
+
+  // 手动智能批改已填的错题
+  window._smartGrade = function() {
+    var rows = document.getElementById('errorRows').children;
+    if (rows.length === 0) {
+      showToast('请先添加错题', 'error');
+      return;
+    }
+
+    var subject = document.getElementById('examSubject').value;
+    var studentId = currentStudentId || 'qiyuan';
+    var student = DataManager.getStudent(studentId);
+    var grade = student ? student.grade : 3;
+
+    var questions = [];
+    for (var i = 0; i < rows.length; i++) {
+      var row = rows[i];
+      var qno = row.querySelector('[name="errQno"]');
+      var text = row.querySelector('[name="errText"]');
+      var wrong = row.querySelector('[name="errWrong"]');
+      var topic = row.querySelector('[name="errTopic"]');
+
+      if (!text || !text.value.trim()) continue;
+
+      questions.push({
+        questionNo: qno ? qno.value : (i+1),
+        questionText: text.value,
+        wrongAnswer: wrong ? wrong.value : '',
+        topic: topic ? topic.value : '',
+        subject: subject,
+        errorType: '计算错误'
+      });
+    }
+
+    if (questions.length === 0) {
+      showToast('请填写题目内容', 'error');
+      return;
+    }
+
+    showToast('正在智能分析... 🔍', 'info');
+    var graded = Grader.autoGrade(questions, subject, grade);
+
+    // 更新每行
+    for (var j = 0; j < Math.min(graded.length, rows.length); j++) {
+      var g = graded[j];
+      var r = rows[j];
+
+      // 更新正确答案
+      if (g.correctAnswer && g.correctAnswer !== '需手动批改') {
+        var correctEl = r.querySelector('[name="errCorrect"]');
+        if (correctEl && !correctEl.value) correctEl.value = g.correctAnswer;
+      }
+
+      // 更新错误类型
+      if (g.errorType && g.errorType !== '—') {
+        var typeEl = r.querySelector('[name="errType"]');
+        if (typeEl) typeEl.value = g.errorType;
+      }
+
+      // 移除旧分析
+      var oldAnalysis = r.querySelector('.grading-analysis');
+      if (oldAnalysis) oldAnalysis.remove();
+
+      // 添加分析
+      if (g.analysis) {
+        var div = document.createElement('div');
+        div.className = 'grading-analysis';
+        var isCorrect = g.analysis === '答案正确！';
+        div.style.cssText = 'margin-top:8px;padding:8px;border-radius:6px;font-size:12px;line-height:1.5;background:' + (isCorrect ? '#EDF9E8' : '#FFF7E6');
+        div.innerHTML = (isCorrect ? '<b>✅ 正确！</b> ' : '<b>🔍 错因分析：</b>') + g.analysis +
+          '<br><b>💡 建议：</b>' + (g.suggestion || '多练习同类题巩固。');
+        r.appendChild(div);
+
+        if (isCorrect) {
+          r.style.borderLeftColor = 'var(--success)';
+          r.style.background = '#EDF9E8';
+        }
+      }
+    }
+
+    var correctCount = graded.filter(function(q) { return q.analysis === '答案正确！'; }).length;
+    showToast('分析完成：' + correctCount + '题正确，' + (graded.length - correctCount) + '题需注意 ✅', 'success');
+  };
   };
 
   // 提交测验
