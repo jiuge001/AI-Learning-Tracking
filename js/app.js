@@ -1306,6 +1306,15 @@
       showToast('数据备份已下载 💾', 'success');
     });
 
+    // 云端同步
+    document.getElementById('btnSync').addEventListener('click', () => {
+      showToast('正在从云端同步数据... ☁️', 'info');
+      DataManager.syncFromCloud(function(result) {
+        showToast(result.message, result.success ? 'success' : 'error');
+        if (result.updated) navigateTo('dashboard');
+      });
+    });
+
     // 数据导入
     document.getElementById('btnImport').addEventListener('click', () => {
       document.getElementById('importFileInput').click();
@@ -1342,6 +1351,15 @@
     DataManager.init();
     bindEvents();
     navigateTo('dashboard');
+
+    // 自动从云端同步（仅在线时）
+    DataManager.setToastFn(showToast);
+    DataManager.syncFromCloud(function(result) {
+      if (result.updated) {
+        showToast('已同步最新数据 ☁️✅', 'success');
+        navigateTo('dashboard');
+      }
+    });
 
     // 注册PWA安装事件
     window.addEventListener('beforeinstallprompt', (e) => {

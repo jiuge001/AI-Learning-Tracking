@@ -350,6 +350,67 @@ const DataManager = (() => {
     URL.revokeObjectURL(url);
   }
 
+  // ===== 云端同步 =====
+  var CLOUD_URL = 'https://raw.githubusercontent.com/jiuge001/AI-Learning-Tracking/master/data/shared-backup.json';
+
+  function syncFromCloud(callback) {
+    // 检查是否在线
+    if (!navigator.onLine) {
+      if (callback) callback({ success: false, message: '离线状态，无法同步' });
+      return;
+    }
+
+    fetch(CLOUD_URL + '?t=' + Date.now())
+      .then(function(resp) {
+        if (!resp.ok) throw new Error('云端暂无数据');
+        return resp.json();
+      })
+      .then(function(cloudData) {
+        if (!cloudData.version || !cloudData.exportedAt) throw new Error('数据格式无效');
+
+        // 检查云端数据是否比本地新
+        var lastSync = localStorage.getItem(_key('lastSync'));
+        if (lastSync && lastSync >= cloudData.exportedAt) {
+          if (callback) callback({ success: true, message: '已是最新数据，无需同步', updated: false });
+          return;
+        }
+
+        // 导入云端数据
+        var result = importAllData(JSON.stringify(cloudData));
+        if (result.success) {
+          localStorage.setItem(_key('lastSync'), cloudData.exportedAt);
+        }
+        if (callback) callback({ success: result.success, message: result.message, updated: result.success });
+      })
+      .catch(function(err) {
+        if (callback) callback({ success: false, message: '同步失败：' + err.message });
+      });
+  }
+
+  function getSyncStatus() {
+    var lastSync = localStorage.getItem(_key('lastSync'));
+    return lastSync || null;
+  }
+
+  // 复制数据到剪贴板（用于分享）
+  function copyDataToClipboard() {
+    var json = exportAllData();
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(json).then(function() {
+        showToastMsg('数据已复制，可粘贴到微信分享', 'success');
+      }).catch(function() {
+        downloadBackup();
+        showToastMsg('已下载备份文件', 'info');
+      });
+    } else {
+      downloadBackup();
+      showToastMsg('已下载备份文件', 'info');
+    }
+  }
+
+  var showToastMsg = null;
+  function setToastFn(fn) { showToastMsg = fn; }
+
   // ===== 初始化 =====
   function init() {
     var isNew = false;
@@ -482,6 +543,7 @@ const DataManager = (() => {
     getProgress, saveProgress,
     getParents, saveParents,
     getStudentStats,
-    exportAllData, importAllData, downloadBackup
+    exportAllData, importAllData, downloadBackup,
+    syncFromCloud, getSyncStatus, copyDataToClipboard, setToastFn
   };
 })();
