@@ -1,0 +1,27 @@
+{
+  "id": "qiyuan",
+  "name": "齐芛",
+  "grade": 5,
+  "subjects": {
+    "语文": {
+      "target": 95,
+      "currentAvg": null,
+      "weakPoints": [],
+      "strengthPoints": []
+    },
+    "数学": {
+      "target": 98,
+      "currentAvg": null,
+      "weakPoints": [],
+      "strengthPoints": []
+    },
+    "英语": {
+      "target": 95,
+      "currentAvg": null,
+      "weakPoints": [],
+      "strengthPoints": []
+    }
+  },
+  "milestones": [],
+  "notes": ""
+}

@@ -1,0 +1,30 @@
+{
+  "students": [
+    {
+      "id": "qiyuan",
+      "name": "齐芛",
+      "grade": 5,
+      "school": "",
+      "className": "",
+      "subjects": ["语文", "数学", "英语"],
+      "targets": { "语文": 95, "数学": 98, "英语": 95 },
+      "color": "#4A90D9",
+      "emoji": "🌿",
+      "semester": "2026春季",
+      "createdAt": "2026-05-08"
+    },
+    {
+      "id": "qipeng",
+      "name": "齐芃",
+      "grade": 3,
+      "school": "",
+      "className": "",
+      "subjects": ["语文", "数学", "英语"],
+      "targets": { "语文": 95, "数学": 98, "英语": 95 },
+      "color": "#52C41A",
+      "emoji": "🌱",
+      "semester": "2026春季",
+      "createdAt": "2026-05-08"
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+# 坚果云同步文件
+.jianguoyun/
+
+# 系统文件
+Thumbs.db
+.DS_Store
+Desktop.ini
+
+# 示例数据备份
+*.sample.json

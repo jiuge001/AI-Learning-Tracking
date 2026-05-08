@@ -1,0 +1,24 @@
+{
+  "parents": [
+    {
+      "id": "dad",
+      "name": "爸爸",
+      "role": "admin",
+      "responsibilities": ["数学"],
+      "avatar": "👨",
+      "joinedAt": "2026-05-08"
+    },
+    {
+      "id": "mom",
+      "name": "妈妈",
+      "role": "admin",
+      "responsibilities": ["语文", "英语"],
+      "avatar": "👩",
+      "joinedAt": "2026-05-08"
+    }
+  ],
+  "tasks": [],
+  "discussions": [],
+  "notifications": [],
+  "plans": []
+}
