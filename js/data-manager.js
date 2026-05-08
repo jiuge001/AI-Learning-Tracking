@@ -288,6 +288,76 @@ const DataManager = (() => {
     };
   }
 
+  // ===== 错题统计 =====
+  function getErrorStats(id) {
+    var errors = getErrors(id);
+    var exams = getExams(id);
+    var student = getStudent(id);
+
+    // 按学科统计
+    var bySubject = {};
+    ['语文', '数学', '英语'].forEach(function(subj) {
+      var subjErrors = errors.filter(function(e) { return e.subject === subj; });
+      var active = subjErrors.filter(function(e) { return !e.mastered; });
+      var mastered = subjErrors.filter(function(e) { return e.mastered; });
+
+      // 按知识点统计
+      var topicMap = {};
+      subjErrors.forEach(function(e) {
+        if (!topicMap[e.topic]) topicMap[e.topic] = { topic: e.topic, total: 0, active: 0, mastered: 0 };
+        topicMap[e.topic].total++;
+        if (e.mastered) topicMap[e.topic].mastered++;
+        else topicMap[e.topic].active++;
+      });
+
+      // 按错误类型统计
+      var typeMap = {};
+      subjErrors.forEach(function(e) {
+        (e.errorTypes || []).forEach(function(t) {
+          if (!typeMap[t]) typeMap[t] = 0;
+          typeMap[t]++;
+        });
+      });
+
+      // 按月份统计趋势
+      var monthMap = {};
+      subjErrors.forEach(function(e) {
+        e.occurrences.forEach(function(o) {
+          var month = o.date ? o.date.substring(0, 7) : '';
+          if (month) {
+            if (!monthMap[month]) monthMap[month] = 0;
+            monthMap[month]++;
+          }
+        });
+      });
+
+      // 掌握率
+      var total = subjErrors.length;
+      var masteryRate = total > 0 ? Math.round(mastered.length / total * 100) : 100;
+
+      bySubject[subj] = {
+        total: total,
+        active: active.length,
+        mastered: mastered.length,
+        masteryRate: masteryRate,
+        topics: Object.values(topicMap).sort(function(a, b) { return b.active - a.active; }),
+        errorTypes: typeMap,
+        monthTrend: monthMap,
+        recentActive: active.slice(0, 5)
+      };
+    });
+
+    return {
+      studentId: id,
+      studentName: student ? student.name : '',
+      totalErrors: errors.length,
+      totalActive: errors.filter(function(e) { return !e.mastered; }).length,
+      totalMastered: errors.filter(function(e) { return e.mastered; }).length,
+      bySubject: bySubject,
+      lastUpdated: new Date().toISOString()
+    };
+  }
+
   // ===== 导出/导入 =====
   function exportAllData() {
     const data = {
@@ -559,7 +629,7 @@ const DataManager = (() => {
     getExercises, saveExercises,
     getProgress, saveProgress,
     getParents, saveParents,
-    getStudentStats,
+    getStudentStats, getErrorStats,
     exportAllData, importAllData, downloadBackup,
     syncFromCloud, getSyncStatus, copyDataToClipboard, setToastFn
   };

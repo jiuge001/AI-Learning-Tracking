@@ -1050,6 +1050,27 @@
         </select></div>
 
       <button class="btn btn-primary btn-block" onclick="window._generateExercise()">🎲 生成练习题</button>
+    </div>
+
+    <!-- 针对性测验卷 -->
+    <div class="card" style="border:2px solid var(--primary);background:var(--primary-light)">
+      <div class="card-title">📝 生成完整测验卷</div>
+      <div style="font-size:12px;color:var(--text-secondary);margin-bottom:12px">
+        基于错题薄弱点，自动生成一份完整试卷，含分值分配和答题区域
+      </div>
+      <div class="form-group"><label class="form-label">学科</label>
+        <select class="form-select" id="testSubject">`;
+    s.subjects.forEach(subj => {
+      html += `<option value="${subj}">${subj}</option>`;
+    });
+    html += `</select></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div class="form-group"><label class="form-label">时间（分钟）</label>
+          <select class="form-select" id="testTime"><option>30</option><option selected>45</option><option>60</option></select></div>
+        <div class="form-group"><label class="form-label">总分</label>
+          <select class="form-select" id="testTotal"><option value="50">50分</option><option value="100" selected>100分</option><option value="120">120分</option></select></div>
+      </div>
+      <button class="btn btn-primary btn-block" onclick="window._generateTestPaper()" style="background:var(--primary);font-weight:700">📝 生成针对性测验卷</button>
     </div>`;
 
     // 已生成的练习
@@ -1169,6 +1190,242 @@
     renderExercises();
   };
 
+  // ===== 生成针对性测验卷 =====
+  window._generateTestPaper = function() {
+    var subject = document.getElementById('testSubject').value;
+    var time = parseInt(document.getElementById('testTime').value);
+    var totalScore = parseInt(document.getElementById('testTotal').value);
+    var studentId = currentStudentId || 'qiyuan';
+    var student = DataManager.getStudent(studentId);
+    var errorStats = DataManager.getErrorStats(studentId);
+    var subjStats = errorStats.bySubject[subject];
+
+    // 获取薄弱知识点
+    var topics = subjStats.topics.filter(function(t) { return t.active > 0; });
+    if (topics.length === 0) {
+      // 没薄弱点就用全部知识点
+      var errors = DataManager.getErrors(studentId);
+      var subjErrors = errors.filter(function(e) { return e.subject === subject; });
+      var topicSet = {};
+      subjErrors.forEach(function(e) {
+        if (!topicSet[e.topic]) topicSet[e.topic] = { topic: e.topic, count: 0 };
+        topicSet[e.topic].count++;
+      });
+      topics = Object.values(topicSet).sort(function(a, b) { return b.count - a.count; });
+    }
+    // 兜底
+    if (topics.length === 0) {
+      topics = [{ topic: subject + '综合', active: 3 }];
+    }
+
+    // 取前5个薄弱点
+    var selectedTopics = topics.slice(0, 5);
+    var questionCount = Math.max(8, Math.floor(time / 5));
+    var easyCount = Math.floor(questionCount * 0.4);
+    var mediumCount = Math.floor(questionCount * 0.4);
+    var hardCount = questionCount - easyCount - mediumCount;
+
+    // 生成题目
+    var questions = [];
+    selectedTopics.forEach(function(t, ti) {
+      var countForTopic = Math.ceil(questionCount / selectedTopics.length);
+      if (ti === selectedTopics.length - 1) {
+        countForTopic = questionCount - questions.length;
+      }
+      if (countForTopic <= 0) return;
+
+      for (var i = 0; i < countForTopic; i++) {
+        var diff = 'medium';
+        if (questions.length < easyCount) diff = 'basic';
+        else if (questions.length >= easyCount + mediumCount) diff = 'hard';
+
+        var templates = getQuestionTemplates(subject, t.topic);
+        var tmpl = templates[questions.length % templates.length];
+        var q = generateFromTemplate(tmpl, diff, questions.length);
+        q.topic = t.topic;
+        q.difficulty = diff;
+        q.points = diff === 'hard' ? Math.round(totalScore / questionCount * 1.5) : Math.round(totalScore / questionCount);
+        questions.push(q);
+      }
+    });
+
+    // 总分配分调整
+    var allocatedPoints = questions.reduce(function(s, q) { return s + q.points; }, 0);
+    if (allocatedPoints !== totalScore && questions.length > 0) {
+      var adjustment = totalScore - allocatedPoints;
+      questions[questions.length - 1].points += adjustment;
+    }
+
+    // 保存为练习
+    var testPaper = {
+      id: 'test_' + Date.now(),
+      studentId: studentId,
+      subject: subject,
+      topic: '针对性测验卷',
+      type: 'test_paper',
+      time: time,
+      totalScore: totalScore,
+      difficulty: 'medium',
+      difficultyLabel: '综合测验',
+      questions: questions,
+      completed: false,
+      score: null,
+      completedDate: null,
+      date: new Date().toISOString().split('T')[0],
+      createdAt: new Date().toISOString(),
+      topics: selectedTopics.map(function(t) { return t.topic; })
+    };
+
+    var exercises = DataManager.getExercises(studentId);
+    exercises.push(testPaper);
+    DataManager.saveExercises(studentId, exercises);
+
+    showToast('测验卷已生成！📝', 'success');
+    renderExercises();
+    setTimeout(function() { window._viewTestPaper(studentId, testPaper.id); }, 300);
+  };
+
+  // 查看测验卷
+  window._viewTestPaper = function(studentId, exerciseId) {
+    var exercises = DataManager.getExercises(studentId);
+    var ex = exercises.find(function(e) { return e.id === exerciseId; });
+    if (!ex) return;
+
+    var student = DataManager.getStudent(studentId);
+
+    var modal = document.getElementById('exerciseModal');
+    var html = '<div class="modal" style="max-width:700px">';
+    html += '<div class="modal-header" style="border-bottom:2px solid #333;padding-bottom:12px"><div class="modal-title">📝 测验卷</div><button class="modal-close" onclick="document.getElementById(\'exerciseModal\').classList.remove(\'active\')">✕</button></div>';
+
+    // 试卷头
+    html += '<div style="text-align:center;padding:16px 0;border-bottom:1px solid #ddd;margin-bottom:16px">';
+    html += '<div style="font-size:20px;font-weight:700;margin-bottom:8px">' + ex.subject + '针对性测验卷</div>';
+    html += '<div style="font-size:13px;color:var(--text-secondary)">';
+    html += '姓名：__________ 　　　 日期：__________ 　　　 得分：__________</div>';
+    html += '<div style="font-size:12px;color:var(--text-light);margin-top:4px">时间：' + ex.time + '分钟 ｜ 总分：' + ex.totalScore + '分</div>';
+    html += '<div style="display:flex;gap:6px;justify-content:center;margin-top:8px;flex-wrap:wrap">';
+    (ex.topics || []).forEach(function(t) {
+      html += '<span class="tag tag-blue">' + t + '</span>';
+    });
+    html += '</div></div>';
+
+    // 题目
+    var section = 1;
+    var qNum = 1;
+    html += '<div style="font-size:14px;line-height:2">';
+
+    // 第1部分：基础题
+    var basicQs = ex.questions.filter(function(q) { return q.difficulty === 'basic'; });
+    if (basicQs.length > 0) {
+      html += '<div style="font-weight:700;margin-bottom:8px">一、基础巩固（共' + basicQs.length + '题）</div>';
+      basicQs.forEach(function(q) {
+        html += '<div style="margin-bottom:16px;padding:8px;background:var(--bg);border-radius:8px">';
+        html += '<b>' + qNum + '.</b> ' + q.question + ' <span style="color:var(--text-light);font-size:11px">(' + q.points + '分)</span>';
+        html += '<div style="margin-top:8px;color:var(--text-light);font-size:12px">答：________________</div>';
+        html += '</div>';
+        qNum++;
+      });
+    }
+
+    // 第2部分：提升题
+    var medQs = ex.questions.filter(function(q) { return q.difficulty === 'medium'; });
+    if (medQs.length > 0) {
+      section++;
+      html += '<div style="font-weight:700;margin-bottom:8px;margin-top:16px">' + (section === 2 ? '二' : '三') + '、能力提升（共' + medQs.length + '题）</div>';
+      medQs.forEach(function(q) {
+        html += '<div style="margin-bottom:16px;padding:8px;background:var(--bg);border-radius:8px">';
+        html += '<b>' + qNum + '.</b> ' + q.question + ' <span style="color:var(--text-light);font-size:11px">(' + q.points + '分)</span>';
+        html += '<div style="margin-top:8px;color:var(--text-light);font-size:12px">答：________________</div>';
+        html += '</div>';
+        qNum++;
+      });
+    }
+
+    // 第3部分：挑战题
+    var hardQs = ex.questions.filter(function(q) { return q.difficulty === 'hard'; });
+    if (hardQs.length > 0) {
+      section++;
+      html += '<div style="font-weight:700;margin-bottom:8px;margin-top:16px">' + (section === 3 ? '三' : '四') + '、拓展挑战（共' + hardQs.length + '题）</div>';
+      hardQs.forEach(function(q) {
+        html += '<div style="margin-bottom:16px;padding:8px;background:var(--bg);border-radius:8px">';
+        html += '<b>' + qNum + '.</b> ' + q.question + ' <span style="color:var(--text-light);font-size:11px">(' + q.points + '分)</span>';
+        html += '<div style="margin-top:8px;color:var(--text-light);font-size:12px">答：________________</div>';
+        html += '</div>';
+        qNum++;
+      });
+    }
+
+    html += '</div>';
+
+    // 答案页
+    html += '<div style="page-break-before:always;margin-top:24px;padding-top:16px;border-top:2px dashed #ddd">';
+    html += '<div style="font-size:18px;font-weight:700;margin-bottom:12px;text-align:center">📋 参考答案</div>';
+    ex.questions.forEach(function(q, i) {
+      html += '<div style="padding:6px 0;font-size:13px;border-bottom:1px solid var(--border-light)">';
+      html += '<b>' + (i + 1) + '.</b> ' + q.answer;
+      html += ' <span style="font-size:11px;color:var(--text-light)">[' + q.topic + ']</span>';
+      html += '</div>';
+    });
+    html += '</div>';
+
+    // 错题统计
+    var errorStats = DataManager.getErrorStats(studentId);
+    var subjStats = errorStats.bySubject[ex.subject];
+    if (subjStats && subjStats.topics.length > 0) {
+      html += '<div style="margin-top:20px;padding:12px;background:#FFF7E6;border-radius:8px">';
+      html += '<div style="font-size:14px;font-weight:700;margin-bottom:8px">📊 错题统计参考</div>';
+      html += '<div style="font-size:12px">该科待攻克错题 <b>' + subjStats.active + '</b> 道，掌握率 <b>' + subjStats.masteryRate + '%</b></div>';
+      html += '<div style="font-size:12px;margin-top:4px">重点知识点：';
+      subjStats.topics.slice(0, 5).forEach(function(t) {
+        html += '<span class="tag tag-orange" style="margin:2px">' + t.topic + '(' + t.active + '次)</span>';
+      });
+      html += '</div></div>';
+    }
+
+    html += '<div style="display:flex;gap:8px;margin-top:16px">';
+    html += '<button class="btn btn-success btn-block" onclick="window._completeTest(\'' + studentId + '\',\'' + ex.id + '\')">✅ 标记已完成</button>';
+    html += '<button class="btn btn-outline btn-block" onclick="window.print()">🖨️ 打印试卷</button>';
+    html += '</div>';
+    html += '</div>';
+
+    modal.innerHTML = html;
+    modal.classList.add('active');
+  };
+
+  window._completeTest = function(studentId, exerciseId) {
+    var score = prompt('请输入得分（总分' + (DataManager.getExercises(studentId).find(function(e) { return e.id === exerciseId; }) || {}).totalScore + '分）：');
+    if (score === null) return;
+    var numScore = parseInt(score);
+    if (isNaN(numScore)) { showToast('请输入有效分数', 'error'); return; }
+
+    var exercises = DataManager.getExercises(studentId);
+    var ex = exercises.find(function(e) { return e.id === exerciseId; });
+    if (ex) {
+      ex.completed = true;
+      ex.score = numScore;
+      ex.completedDate = new Date().toISOString().split('T')[0];
+      DataManager.saveExercises(studentId, exercises);
+
+      // 自动保存为一次测验记录
+      if (ex.type === 'test_paper') {
+        DataManager.addExam(studentId, {
+          subject: ex.subject,
+          title: '针对性测验卷',
+          examType: '自测',
+          date: new Date().toISOString().split('T')[0],
+          totalScore: ex.totalScore,
+          actualScore: numScore,
+          errors: [],
+          images: [],
+          reviewedBy: ''
+        });
+      }
+    }
+    document.getElementById('exerciseModal').classList.remove('active');
+    showToast('测验成绩已保存！得分：' + numScore + '分 ✅', 'success');
+    renderExercises();
+  };
+
   // 练习题生成引擎
   function generateQuestions(subject, topic, difficulty, count) {
     const questions = [];
@@ -1193,6 +1450,23 @@
           { q: (n) => `小明有 ${n} 块糖，吃了 1/${n%3+2}，还剩几分之几？`, a: (n) => `${(n%3+2-1)}/${n%3+2}` }
         ]
       },
+      '两位数乘法': [
+        { q: (a, b) => a + ' × ' + b + ' = ?', a: (a, b) => '' + (a * b) },
+        { q: (a, b) => '估算：' + a + ' × ' + b + ' ≈ ?', a: (a, b) => '约' + (Math.round(a/10)*10) + '×' + (Math.round(b/10)*10) + '=' + (Math.round(a/10)*Math.round(b/10)*100) },
+        { q: (a, b) => '用竖式计算：' + a + ' × ' + b, a: (a, b) => '' + (a * b) },
+        { q: (a, b) => a + '个' + b + '是多少？', a: (a, b) => '' + (a * b) }
+      ],
+      '小数运算': [
+        { q: (a, b) => (a/10).toFixed(1) + ' + ' + (b/10).toFixed(1) + ' = ?', a: (a, b) => '' + ((a+b)/10).toFixed(1) },
+        { q: (a, b) => (a/10).toFixed(1) + ' × ' + (b/10).toFixed(1) + ' = ?', a: (a, b) => '' + ((a*b)/100).toFixed(2) },
+        { q: (a, b) => '把 ' + (b/10).toFixed(1) + ' 扩大到原来的 ' + a + ' 倍', a: (a, b) => '' + ((b/10)*a).toFixed(1) }
+      ],
+      '面积计算': [
+        { q: (a, b) => '长方形的长是' + a + 'cm，宽是' + b + 'cm，面积是多少？', a: (a, b) => '' + (a*b) + 'cm²' },
+        { q: (a) => '正方形边长' + a + 'cm，面积是多少？', a: (a) => '' + (a*a) + 'cm²' },
+        { q: (a, b) => '长' + a + 'm宽' + b + 'm的操场，周长是多少？', a: (a, b) => '' + (2*(a+b)) + 'm' }
+      ]
+      },
       '语文': {
         '阅读理解': [
           { q: () => '请用简洁的语言概括这段话的主要内容（不超过20字）', a: () => '（主观题，请家长批改）' },
@@ -1210,6 +1484,21 @@
           { q: () => 'Complete: I ___ (be) a student.', a: () => 'am' },
           { q: () => 'What is the plural form of "child"?', a: () => 'children' },
           { q: () => 'Translate: 她每天早上7点起床。', a: () => 'She gets up at 7 o\'clock every morning.' }
+        ],
+        '一般现在时': [
+          { q: () => 'He ___ (go) to school every day.', a: () => 'goes' },
+          { q: () => '___ your mother work in a hospital?', a: () => 'Does' },
+          { q: () => 'They ___ (not like) math.', a: () => 'don\'t like' },
+          { q: () => 'She ___ (have) a new book.', a: () => 'has' }
+        ],
+        '词汇拼写': [
+          { q: () => '请拼写"图书馆"的英文', a: () => 'library' },
+          { q: () => '请拼写"科学"的英文', a: () => 'science' },
+          { q: () => '请拼写"星期三"的英文', a: () => 'Wednesday' }
+        ],
+        '句型': [
+          { q: () => '用there be句型描述：教室里有一个黑板', a: () => 'There is a blackboard in the classroom.' },
+          { q: () => '用can造句：我会游泳', a: () => 'I can swim.' }
         ]
       }
     };
@@ -1314,6 +1603,7 @@
 
     students.forEach(s => {
       const stats = DataManager.getStudentStats(s.id);
+      const errorStats = DataManager.getErrorStats(s.id);
       const errors = DataManager.getErrors(s.id);
       const weakpoints = DataManager.getWeakpoints(s.id);
 
@@ -1334,7 +1624,20 @@
       html += '</div>';
 
       // 关键数据
-      html += `<div style="font-size:13px">📝 共${stats.totalExams}次测验 | ❌ ${stats.totalErrors}道待攻克错题 | ✅ ${stats.masteredErrors}道已掌握</div>`;
+      html += '<div style="font-size:13px">📝 共' + stats.totalExams + '次测验 | ❌ ' + stats.totalErrors + '道待攻克错题 | ✅ ' + stats.masteredErrors + '道已掌握</div>';
+
+      // 各科错题统计
+      if (errorStats) {
+        html += '<div style="margin-top:10px"><b>📋 各科错题掌握情况：</b></div>';
+        html += '<div class="table-container"><table style="font-size:12px"><tr><th>学科</th><th>总错题</th><th>待攻克</th><th>已掌握</th><th>掌握率</th><th>重点薄弱点</th></tr>';
+        s.subjects.forEach(function(subj) {
+          var subjStat = errorStats.bySubject[subj];
+          if (!subjStat) return;
+          var topTopics = (subjStat.topics || []).slice(0, 2).map(function(t) { return t.topic + '(' + t.active + '次)'; }).join('、');
+          html += '<tr><td>' + subj + '</td><td>' + subjStat.total + '</td><td style="color:var(--danger)">' + subjStat.active + '</td><td style="color:var(--success)">' + subjStat.mastered + '</td><td>' + subjStat.masteryRate + '%</td><td style="font-size:11px">' + (topTopics || '—') + '</td></tr>';
+        });
+        html += '</table></div>';
+      }
 
       // 建议
       const allWeak = [];
@@ -1350,9 +1653,28 @@
     });
 
     html += '</div>';
+
+    // 错题分布图容器
+    html += '<div class="card"><div class="card-title">📊 各科错题分布</div>';
+    html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px">';
+    html += '<div><canvas id="chartReportQiyuan" style="max-height:200px"></canvas><div style="text-align:center;font-size:12px;color:var(--qiyuan-color)">🌿 齐芛</div></div>';
+    html += '<div><canvas id="chartReportQipeng" style="max-height:200px"></canvas><div style="text-align:center;font-size:12px;color:var(--qipeng-color)">🌱 齐芃</div></div>';
+    html += '</div></div>';
+
     preview.innerHTML = html;
     exportCard.style.display = 'block';
     preview.scrollIntoView({ behavior: 'smooth' });
+
+    // 渲染错题分布图
+    setTimeout(function() {
+      ['qiyuan', 'qipeng'].forEach(function(sid) {
+        var canvasId = sid === 'qiyuan' ? 'chartReportQiyuan' : 'chartReportQipeng';
+        var errs = DataManager.getErrors(sid).filter(function(e) { return !e.mastered; });
+        if (errs.length > 0) {
+          ChartRenderer.renderErrorDist(canvasId, errs);
+        }
+      });
+    }, 200);
   };
 
   window._printReport = function() {
