@@ -351,16 +351,33 @@ const DataManager = (() => {
   }
 
   // ===== 云端同步 =====
-  var CLOUD_URL = 'https://raw.githubusercontent.com/jiuge001/AI-Learning-Tracking/master/data/shared-backup.json';
+  var CLOUD_URL = null; // 动态计算
+
+  function _getCloudUrl() {
+    if (CLOUD_URL) return CLOUD_URL;
+    // 自动从当前页面URL推导
+    var loc = window.location;
+    if (loc.hostname === 'localhost' || loc.hostname === '127.0.0.1' || loc.protocol === 'file:') {
+      return null; // 本地模式不同步
+    }
+    CLOUD_URL = loc.protocol + '//' + loc.host + loc.pathname.replace(/\/[^\/]*$/, '') + '/data/shared-backup.json';
+    return CLOUD_URL;
+  }
 
   function syncFromCloud(callback) {
-    // 检查是否在线
+    var url = _getCloudUrl();
+
+    // 检查是否在线且有云端URL
     if (!navigator.onLine) {
       if (callback) callback({ success: false, message: '离线状态，无法同步' });
       return;
     }
+    if (!url) {
+      if (callback) callback({ success: false, message: '本地模式，云端同步不可用' });
+      return;
+    }
 
-    fetch(CLOUD_URL + '?t=' + Date.now())
+    fetch(url + '?t=' + Date.now())
       .then(function(resp) {
         if (!resp.ok) throw new Error('云端暂无数据');
         return resp.json();
