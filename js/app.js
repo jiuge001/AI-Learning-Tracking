@@ -465,13 +465,13 @@
     renderExamEntry();
   };
 
-  // 照片上传
+  // 照片上传 - 自动触发OCR
   window._handlePhotoUpload = function(event) {
-    const files = event.target.files;
-    const previews = document.getElementById('photoPreviews');
-    const btnOCR = document.getElementById('btnOCR');
+    var files = event.target.files;
+    var previews = document.getElementById('photoPreviews');
+    var btnOCR = document.getElementById('btnOCR');
 
-    for (var i = 0; i < files.length; i++) {
+    for (var i = 0; i < Math.min(files.length, 3); i++) {
       (function(f) {
         var reader = new FileReader();
         reader.onload = function(e) {
@@ -479,8 +479,11 @@
           div.className = 'photo-preview';
           div.innerHTML = '<img src="' + e.target.result + '" alt="试卷"><button class="remove-btn" onclick="this.parentElement.remove();window._checkOCRButton()">×</button>';
           previews.appendChild(div);
-          // 启用OCR按钮
           if (btnOCR) btnOCR.disabled = false;
+          // 自动触发OCR
+          if (previews.children.length === 1) {
+            setTimeout(function() { window._runOCR(true); }, 800);
+          }
         };
         reader.readAsDataURL(f);
       })(files[i]);
@@ -494,23 +497,19 @@
     if (btnOCR) btnOCR.disabled = !previews || previews.children.length === 0;
   };
 
-  // 运行OCR识别
-  window._runOCR = function() {
+  // 运行OCR识别 - autoMode时自动批改填表
+  window._runOCR = function(autoMode) {
     var previews = document.getElementById('photoPreviews');
     var imgs = previews.querySelectorAll('img');
     var statusEl = document.getElementById('ocrStatus');
     var btnOCR = document.getElementById('btnOCR');
 
-    if (imgs.length === 0) {
-      showToast('请先拍照上传试卷', 'error');
-      return;
-    }
+    if (imgs.length === 0) { showToast('请先拍照上传试卷', 'error'); return; }
 
-    // 显示处理中
     btnOCR.disabled = true;
-    btnOCR.textContent = '⏳ 正在识别中...';
+    btnOCR.textContent = '⏳ 识别中...';
     statusEl.style.display = 'block';
-    statusEl.innerHTML = '<div class="alert alert-info">🔍 正在识别试卷内容，请稍候...（免费API约3-5秒）</div>';
+    statusEl.innerHTML = '<div class="alert alert-info">🔍 正在智能识别试卷，自动批改中...</div>';
 
     var base64 = imgs[0].src;
     var maxWidth = 1200;
@@ -523,40 +522,39 @@
         btnOCR.textContent = '🔍 智能识别试卷内容';
 
         if (!result.success) {
-          statusEl.innerHTML = '<div class="alert alert-warning">⚠️ 自动识别失败：' + (result.error || '') + '<br><small>请手动录入或稍后重试</small></div>';
-          showToast('OCR识别失败，请手动录入', 'error');
+          statusEl.innerHTML = '<div class="alert alert-warning">⚠️ 识别失败：' + (result.error || '') + '</div>';
+          showToast('OCR识别失败', 'error');
           return;
         }
 
         var ocrText = result.text;
         if (!ocrText || ocrText.trim().length < 5) {
-          statusEl.innerHTML = '<div class="alert alert-warning">⚠️ 未识别到足够文字<br><small>请确认照片清晰、光线充足，或手动录入</small></div>';
+          statusEl.innerHTML = '<div class="alert alert-warning">⚠️ 未识别到足够文字，请确认照片清晰</div>';
           return;
         }
 
-        // 解析为题目
         var questions = OCRHelper.parseToQuestions(ocrText);
-
-        // 显示识别结果
-        statusEl.innerHTML = '<div class="alert alert-success">✅ 识别成功！检测到 ' + questions.length + ' 道题目</div>';
-
-        // 显示预览和确认区
-        var reviewEl = document.getElementById('ocrReview');
-        reviewEl.style.display = 'block';
-        var reviewHtml = '<div class="card"><div class="card-title">📋 识别结果预览</div>';
-        reviewHtml += '<div style="max-height:300px;overflow-y:auto;font-size:12px;color:var(--text-secondary);background:var(--bg);padding:12px;border-radius:8px;margin-bottom:12px;white-space:pre-wrap">' + escapeHtml(ocrText.substring(0, 1000)) + (ocrText.length > 1000 ? '...' : '') + '</div>';
-        reviewHtml += '<div style="font-size:12px;margin-bottom:12px">检测到 <b>' + questions.length + '</b> 道题目</div>';
-        reviewHtml += '<div class="btn-group" style="flex-direction:column;gap:8px">';
-        reviewHtml += '<button class="btn btn-primary btn-sm btn-block" onclick="window._fillAndGrade()">✅ 智能批改并填入</button>';
-        reviewHtml += '<button class="btn btn-outline btn-sm btn-block" onclick="window._fillOCRResults()">📝 仅填入不批改</button>';
-        reviewHtml += '<button class="btn btn-outline btn-sm btn-block" onclick="document.getElementById(\'ocrReview\').style.display=\'none\'">取消</button>';
-        reviewHtml += '</div></div>';
-        reviewEl.innerHTML = reviewHtml;
-
-        // 暂存识别结果
         window._ocrQuestions = questions;
 
-        showToast('识别成功！请确认后填入表单', 'success');
+        if (autoMode) {
+          // 自动模式：跳过预览，直接批改填表
+          window._fillAndGrade();
+          var studentId = currentStudentId || 'qiyuan';
+          var student = DataManager.getStudent(studentId);
+          statusEl.innerHTML = '<div class="alert alert-success">✅ 自动识别+批改完成！已填入 ' + questions.length + ' 题，请核对后保存</div>';
+        } else {
+          // 手动模式：显示预览
+          statusEl.innerHTML = '<div class="alert alert-success">✅ 识别成功！检测到 ' + questions.length + ' 道题目</div>';
+          var reviewEl = document.getElementById('ocrReview');
+          reviewEl.style.display = 'block';
+          reviewEl.innerHTML = '<div class="card"><div class="card-title">📋 识别结果</div>' +
+            '<div style="max-height:200px;overflow-y:auto;font-size:12px;color:var(--text-secondary);background:var(--bg);padding:12px;border-radius:8px;margin-bottom:12px;white-space:pre-wrap">' + escapeHtml(ocrText.substring(0, 800)) + '</div>' +
+            '<div class="btn-group" style="flex-direction:column;gap:8px">' +
+            '<button class="btn btn-primary btn-sm btn-block" onclick="window._fillAndGrade()">✅ 智能批改并填入</button>' +
+            '<button class="btn btn-outline btn-sm btn-block" onclick="window._fillOCRResults()">📝 仅填入不批改</button>' +
+            '<button class="btn btn-outline btn-sm btn-block" onclick="document.getElementById(\'ocrReview\').style.display=\'none\'">取消</button>' +
+            '</div></div>';
+        }
       });
     });
   };
