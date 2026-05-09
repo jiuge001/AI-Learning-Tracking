@@ -761,12 +761,13 @@
 
   // 提交测验
   window._submitExam = function() {
-    const subject = document.getElementById('examSubject').value;
-    const title = document.getElementById('examTitle').value || subject + '测验';
-    const examType = document.getElementById('examType').value;
-    const total = parseInt(document.getElementById('examTotal').value) || 100;
-    const score = parseInt(document.getElementById('examScore').value);
-    const date = document.getElementById('examDate').value;
+    var subject = document.getElementById('examSubject').value;
+    var title = document.getElementById('examTitle').value || subject + '测验';
+    var examType = document.getElementById('examType').value;
+    var total = parseInt(document.getElementById('examTotal').value) || 100;
+    var score = parseInt(document.getElementById('examScore').value);
+    var date = document.getElementById('examDate').value;
+    var sid = currentStudentId || 'qiyuan';
 
     if (isNaN(score)) {
       showToast('请输入实际得分', 'error');
@@ -778,22 +779,32 @@
     }
 
     // 收集错题
-    const errors = [];
-    const rows = document.getElementById('errorRows').children;
-    for (let row of rows) {
-      const qno = row.querySelector('[name="errQno"]').value;
-      const text = row.querySelector('[name="errText"]').value;
-      const wrong = row.querySelector('[name="errWrong"]').value;
-      const correct = row.querySelector('[name="errCorrect"]').value;
-      const topic = row.querySelector('[name="errTopic"]').value;
-      const type = row.querySelector('[name="errType"]').value;
-      if (topic || text) {
+    var errors = [];
+    var errorRows = document.getElementById('errorRows');
+    var rows = errorRows ? errorRows.children : [];
+    for (var ri = 0; ri < rows.length; ri++) {
+      var row = rows[ri];
+      var qnoEl = row.querySelector('[name="errQno"]');
+      var textEl = row.querySelector('[name="errText"]');
+      var wrongEl = row.querySelector('[name="errWrong"]');
+      var correctEl = row.querySelector('[name="errCorrect"]');
+      var topicEl = row.querySelector('[name="errTopic"]');
+      var typeEl = row.querySelector('[name="errType"]');
+
+      var qno = qnoEl ? qnoEl.value : '';
+      var etext = textEl ? textEl.value : '';
+      var wrong = wrongEl ? wrongEl.value : '';
+      var correct = correctEl ? correctEl.value : '';
+      var topic = topicEl ? topicEl.value : '';
+      var etype = typeEl ? typeEl.value : '计算错误';
+
+      if (topic || etext) {
         errors.push({
           questionNo: qno || '',
-          questionText: text || '',
+          questionText: etext || '',
           topic: topic || '未分类',
           subTopic: topic || '未分类',
-          errorType: type,
+          errorType: etype || '计算错误',
           wrongAnswer: wrong,
           correctAnswer: correct,
           analysis: '',
@@ -803,13 +814,14 @@
     }
 
     // 收集照片
-    const images = [];
-    document.querySelectorAll('#photoPreviews img').forEach(img => {
-      images.push(img.src);
-    });
+    var images = [];
+    var previews = document.querySelectorAll('#photoPreviews img');
+    for (var pi = 0; pi < previews.length; pi++) {
+      images.push(previews[pi].src);
+    }
 
-    const exam = { subject, title, examType, totalScore: total, actualScore: score, date, errors, weakPoints: errors.map(e => e.topic), images };
-    DataManager.addExam(currentStudentId, exam);
+    var exam = { subject: subject, title: title, examType: examType, totalScore: total, actualScore: score, date: date, errors: errors, weakPoints: errors.map(function(e) { return e.topic; }), images: images };
+    DataManager.addExam(sid, exam);
 
     showToast('测验录入成功！✅', 'success');
     navigateTo('dashboard');
