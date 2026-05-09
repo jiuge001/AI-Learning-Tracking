@@ -762,7 +762,6 @@
     var correctCount = graded.filter(function(q) { return q.analysis === '答案正确！'; }).length;
     showToast('分析完成：' + correctCount + '题正确，' + (graded.length - correctCount) + '题需注意 ✅', 'success');
   };
-  };
 
   // 提交测验
   window._submitExam = function() {
@@ -1446,8 +1445,7 @@
           { q: (a, b, c, d) => `比较大小：${a}/${b} ○ ${c}/${d}（填 > < =）`, a: (a, b, c, d) => a/b > c/d ? '>' : a/b < c/d ? '<' : '=' },
           { q: (a, b, c) => `把 ${a}/${b} 化成最简分数`, a: (a, b) => `${a/gcd(a,b)}/${b/gcd(a,b)}` },
           { q: (n) => `小明有 ${n} 块糖，吃了 1/${n%3+2}，还剩几分之几？`, a: (n) => `${(n%3+2-1)}/${n%3+2}` }
-        ]
-      },
+        ],
       '两位数乘法': [
         { q: (a, b) => a + ' × ' + b + ' = ?', a: (a, b) => '' + (a * b) },
         { q: (a, b) => '估算：' + a + ' × ' + b + ' ≈ ?', a: (a, b) => '约' + (Math.round(a/10)*10) + '×' + (Math.round(b/10)*10) + '=' + (Math.round(a/10)*Math.round(b/10)*100) },
@@ -1512,8 +1510,8 @@
     }
 
     // 默认兜底
-    if (all[subject]) return Object.values(all[subject])[0] || [{ q: () => `关于${topic}的练习题`, a: () => '（请家长批改）' }];
-    return [{ q: () => `关于${topic}的练习题`, a: () => '（请家长批改）' }];
+    if (all[subject]) return Object.values(all[subject])[0] || [{ q: () => '关于该知识点的练习题', a: () => '（请家长批改）' }];
+    return [{ q: () => '关于该知识点的练习题', a: () => '（请家长批改）' }];
   }
 
   function generateFromTemplate(t, difficulty, seed) {
