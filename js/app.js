@@ -408,10 +408,10 @@
 
     <!-- OCR识别按钮区 -->
     <div class="card" style="text-align:center">
-      <button class="btn btn-primary btn-block" id="btnOCR" onclick="window._runOCR()" disabled style="margin-bottom:8px">
-        🔍 智能识别试卷内容
+      <button class="btn btn-outline btn-block" id="btnOCR" onclick="window._runOCR(true)" disabled style="margin-bottom:8px">
+        🔍 拍照后点击识别（每天500次免费）
       </button>
-      <div style="font-size:11px;color:var(--text-light)">拍照后点击识别，自动提取题目和答案</div>
+      <div style="font-size:11px;color:var(--text-light)">优先手动录入试卷分数和错题，OCR为辅助功能</div>
     </div>
 
     <button class="btn btn-primary btn-block btn-lg" onclick="window._submitExam()">✅ 保存测验记录</button>`;
@@ -480,10 +480,6 @@
           div.innerHTML = '<img src="' + e.target.result + '" alt="试卷"><button class="remove-btn" onclick="this.parentElement.remove();window._checkOCRButton()">×</button>';
           previews.appendChild(div);
           if (btnOCR) btnOCR.disabled = false;
-          // 自动触发OCR
-          if (previews.children.length === 1) {
-            setTimeout(function() { window._runOCR(true); }, 800);
-          }
         };
         reader.readAsDataURL(f);
       })(files[i]);
@@ -522,8 +518,8 @@
         btnOCR.textContent = '🔍 智能识别试卷内容';
 
         if (!result.success) {
-          statusEl.innerHTML = '<div class="alert alert-warning">⚠️ 识别失败：' + (result.error || '') + '</div>';
-          showToast('OCR识别失败', 'error');
+          statusEl.innerHTML = '<div class="alert alert-warning">⚠️ ' + (result.error || '识别失败') + '<br><small>请手动录入错题，或明日再试OCR（每日500次免费额度）</small></div>';
+          showToast('识别失败，请手动录入', 'error');
           return;
         }
 
