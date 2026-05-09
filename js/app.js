@@ -411,7 +411,10 @@
     </div>
 
     <div style="text-align:center;padding:8px 0">
-      <small style="color:var(--text-light)">💡 对照拍好的试卷照片，手动填入分数和错题信息即可。手写体暂不支持自动识别。</small>
+      <button class="btn btn-outline btn-block" id="btnOCR" onclick="window._runOCR(true)" disabled style="margin-bottom:6px">
+        🔍 腾讯云手写识别（拍照后点击）
+      </button>
+      <small style="color:var(--text-light)">手写体/印刷体均支持，识别后可自动填入</small>
     </div>
 
     <button class="btn btn-primary btn-block btn-lg" onclick="window._submitExam()">✅ 保存测验记录</button>`;
@@ -472,6 +475,7 @@
     var refDiv = document.getElementById('photoReference');
     var refImg = document.getElementById('refImage');
     var uploadArea = document.getElementById('photoUploadArea');
+    var btnOCR = document.getElementById('btnOCR');
 
     for (var i = 0; i < Math.min(files.length, 3); i++) {
       (function(f) {
@@ -486,6 +490,7 @@
           if (refImg) refImg.src = e.target.result;
           if (refDiv) refDiv.style.display = 'block';
           if (uploadArea) uploadArea.style.display = 'none';
+          if (btnOCR) { btnOCR.disabled = false; }
         };
         reader.readAsDataURL(f);
       })(files[i]);
@@ -507,6 +512,7 @@
     if (imgs.length === 0) {
       if (refDiv) refDiv.style.display = 'none';
       if (uploadArea) uploadArea.style.display = 'block';
+      if (btnOCR) btnOCR.disabled = true;
     } else {
       document.getElementById('refImage').src = imgs[imgs.length - 1].src;
     }
