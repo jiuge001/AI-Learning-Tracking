@@ -213,9 +213,87 @@ window.OCRHelper = (function() {
     img.src = base64;
   }
 
+  /**
+   * 分析试卷元数据：学科、标题、类型、总分、得分
+   */
+  function analyzeExamMetadata(ocrText) {
+    var meta = {
+      subject: '',
+      title: '',
+      examType: '单元测试',
+      totalScore: 100,
+      actualScore: null
+    };
+
+    if (!ocrText) return meta;
+    var text = ocrText;
+
+    // 检测学科
+    if (/数学|分数|小数|乘|除|加|减|方程|几何|面积|周长|计算|算式/.test(text)) {
+      meta.subject = '数学';
+    } else if (/语文|阅读|默写|古诗|作文|拼音|汉字|成语|修辞|课文/.test(text)) {
+      meta.subject = '语文';
+    } else if (/英语|English|vocabulary|grammar|spell|translate/.test(text)) {
+      meta.subject = '英语';
+    }
+
+    // 检测标题（取前两行中较长的作为标题候选）
+    var lines = text.split('\n').filter(function(l) { return l.trim(); });
+    for (var i = 0; i < Math.min(5, lines.length); i++) {
+      var line = lines[i].trim();
+      // 匹配 "XXX测验"、"XXX考试"、"第X单元" 等
+      if (/(第[一二三四五六七八九十\d]+[单元课章]|[期末中].*考试|.*测验|.*测试|.*练习)/.test(line)) {
+        meta.title = line.substring(0, 30);
+        break;
+      }
+    }
+    if (!meta.title && lines.length > 0) {
+      // 用第一行作为标题
+      meta.title = lines[0].trim().substring(0, 30);
+    }
+
+    // 检测测验类型
+    if (/期中/.test(text)) meta.examType = '期中考试';
+    else if (/期末/.test(text)) meta.examType = '期末考试';
+    else if (/模拟/.test(text)) meta.examType = '模拟考试';
+    else if (/随堂|课堂/.test(text)) meta.examType = '随堂测验';
+    else if (/单元/.test(text)) meta.examType = '单元测试';
+
+    // 检测总分
+    var totalMatch = text.match(/(?:总分|满分)[：:\s]*(\d{2,3})/);
+    if (totalMatch) meta.totalScore = parseInt(totalMatch[1]);
+    else {
+      var score100 = text.match(/(\d{2,3})\s*分\s*(?:总分|满分|试卷)/);
+      if (score100) meta.totalScore = parseInt(score100[1]);
+    }
+
+    // 检测实际得分
+    var scoreMatches = text.match(/(?:得分|成绩|分数|实得)[：:\s]*(\d{1,3})/g);
+    if (scoreMatches) {
+      var lastMatch = scoreMatches[scoreMatches.length - 1];
+      var scoreNum = lastMatch.match(/(\d+)/);
+      if (scoreNum) meta.actualScore = parseInt(scoreNum[1]);
+    }
+    if (!meta.actualScore) {
+      var redScore = text.match(/(\d{1,3})\s*(?:分|$)/m);
+      if (redScore && parseInt(redScore[1]) <= meta.totalScore) {
+        meta.actualScore = parseInt(redScore[1]);
+      }
+    }
+
+    // 检测错题标记（✗、×、❌等标记后的内容可能是错误答案）
+    var errorMark = text.match(/[✗×❌Xx]\s*([^\n]+)/g);
+    if (errorMark) {
+      meta.hasErrorMarks = true;
+    }
+
+    return meta;
+  }
+
   return {
     recognizeImage: recognizeImage,
     parseToQuestions: parseToQuestions,
-    compressImage: compressImage
+    compressImage: compressImage,
+    analyzeExamMetadata: analyzeExamMetadata
   };
 })();

@@ -562,7 +562,12 @@
         }
 
         var questions = OCRHelper.parseToQuestions(ocrText);
+        var metadata = OCRHelper.analyzeExamMetadata(ocrText);
         window._ocrQuestions = questions;
+        window._ocrMetadata = metadata;
+
+        // 自动填入试卷元数据
+        fillFormMeta(metadata);
 
         if (autoMode) {
           // 自动模式：跳过预览，直接批改填表
@@ -706,6 +711,23 @@
     var div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+  }
+
+  function fillFormMeta(meta) {
+    if (!meta) return;
+    var map = {
+      subject: 'examSubject',
+      title: 'examTitle',
+      examType: 'examType',
+      totalScore: 'examTotal',
+      actualScore: 'examScore'
+    };
+    Object.keys(map).forEach(function(key) {
+      if (meta[key]) {
+        var el = document.getElementById(map[key]);
+        if (el && !el.value) el.value = meta[key];
+      }
+    });
   }
 
   // 手动智能批改已填的错题
