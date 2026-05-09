@@ -1,6 +1,6 @@
 {
-  "version": "1.1",
-  "exportedAt": "2026-05-09T02:00:27.000Z",
+  "version": "1.2",
+  "exportedAt": "2026-05-09T05:03:18.000Z",
   "students": {
     "students": [
       {
@@ -116,7 +116,7 @@
         ],
         "images": [],
         "reviewedBy": "妈妈",
-        "createdAt": "2026-05-08T14:21:47.353Z",
+        "createdAt": "2026-05-08T14:21:47.354Z",
         "studentId": "qiyuan"
       },
       {
@@ -288,11 +288,7 @@
         ]
       },
       "history": [
-        {
-          "date": "2026-05-08",
-          "totalErrors": 2,
-          "bySubject": { "语文": 0, "数学": 2, "英语": 0 }
-        }
+        { "date": "2026-05-08", "totalErrors": 2, "bySubject": { "语文": 0, "数学": 2, "英语": 0 } }
       ]
     },
     "exercises": [],
@@ -453,11 +449,7 @@
         ]
       },
       "history": [
-        {
-          "date": "2026-05-08",
-          "totalErrors": 2,
-          "bySubject": { "语文": 0, "数学": 2, "英语": 0 }
-        }
+        { "date": "2026-05-08", "totalErrors": 2, "bySubject": { "语文": 0, "数学": 2, "英语": 0 } }
       ]
     },
     "exercises": [],
