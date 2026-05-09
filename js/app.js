@@ -394,24 +394,24 @@
     </div>
 
     <div class="card">
-      <div class="form-group"><label class="form-label">📷 试卷照片</label>
+      <div class="form-group"><label class="form-label">📷 试卷照片（拍照后对照录入）</label>
         <div class="photo-upload" onclick="document.getElementById('photoInput').click()" id="photoUploadArea">
           <div class="upload-icon">📸</div>
-          <div class="upload-text">点击拍照或上传试卷图片</div>
+          <div class="upload-text">点击拍照留存试卷</div>
         </div>
         <input type="file" id="photoInput" accept="image/*" capture="environment" style="display:none" onchange="window._handlePhotoUpload(event)">
         <div id="photoPreviews" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px"></div>
+        <!-- 大图参照区 -->
+        <div id="photoReference" style="display:none;margin-top:8px;text-align:center">
+          <div style="font-size:12px;color:var(--text-secondary);margin-bottom:4px">📷 对照照片，边看边录入</div>
+          <img id="refImage" style="max-width:100%;max-height:300px;border-radius:8px;border:1px solid var(--border)" />
+        </div>
         <div id="ocrStatus" style="display:none;margin-top:8px"></div>
-        <div id="ocrReview" style="display:none;margin-top:8px"></div>
       </div>
     </div>
 
-    <!-- OCR识别按钮区 -->
-    <div class="card" style="text-align:center">
-      <button class="btn btn-outline btn-block" id="btnOCR" onclick="window._runOCR(true)" disabled style="margin-bottom:8px">
-        🔍 拍照后点击识别（每天500次免费）
-      </button>
-      <div style="font-size:11px;color:var(--text-light)">优先手动录入试卷分数和错题，OCR为辅助功能</div>
+    <div style="text-align:center;padding:8px 0">
+      <small style="color:var(--text-light)">💡 对照拍好的试卷照片，手动填入分数和错题信息即可。手写体暂不支持自动识别。</small>
     </div>
 
     <button class="btn btn-primary btn-block btn-lg" onclick="window._submitExam()">✅ 保存测验记录</button>`;
@@ -465,24 +465,50 @@
     renderExamEntry();
   };
 
-  // 照片上传 - 自动触发OCR
+  // 照片上传 - 显示大图参照
   window._handlePhotoUpload = function(event) {
     var files = event.target.files;
     var previews = document.getElementById('photoPreviews');
-    var btnOCR = document.getElementById('btnOCR');
+    var refDiv = document.getElementById('photoReference');
+    var refImg = document.getElementById('refImage');
+    var uploadArea = document.getElementById('photoUploadArea');
 
     for (var i = 0; i < Math.min(files.length, 3); i++) {
       (function(f) {
         var reader = new FileReader();
         reader.onload = function(e) {
+          // 小图预览
           var div = document.createElement('div');
           div.className = 'photo-preview';
-          div.innerHTML = '<img src="' + e.target.result + '" alt="试卷"><button class="remove-btn" onclick="this.parentElement.remove();window._checkOCRButton()">×</button>';
+          div.innerHTML = '<img src="' + e.target.result + '" alt="试卷" onclick="window._showRef(this.src)"><button class="remove-btn" onclick="this.parentElement.remove();window._updateRef()">×</button>';
           previews.appendChild(div);
-          if (btnOCR) btnOCR.disabled = false;
+          // 显示大图参照
+          if (refImg) refImg.src = e.target.result;
+          if (refDiv) refDiv.style.display = 'block';
+          if (uploadArea) uploadArea.style.display = 'none';
         };
         reader.readAsDataURL(f);
       })(files[i]);
+    }
+  };
+
+  window._showRef = function(src) {
+    var refImg = document.getElementById('refImage');
+    var refDiv = document.getElementById('photoReference');
+    if (refImg) refImg.src = src;
+    if (refDiv) refDiv.style.display = 'block';
+  };
+
+  window._updateRef = function() {
+    var previews = document.getElementById('photoPreviews');
+    var refDiv = document.getElementById('photoReference');
+    var uploadArea = document.getElementById('photoUploadArea');
+    var imgs = previews.querySelectorAll('img');
+    if (imgs.length === 0) {
+      if (refDiv) refDiv.style.display = 'none';
+      if (uploadArea) uploadArea.style.display = 'block';
+    } else {
+      document.getElementById('refImage').src = imgs[imgs.length - 1].src;
     }
   };
 
