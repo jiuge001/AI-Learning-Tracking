@@ -1171,14 +1171,18 @@
   // ==========================================
   //  页面4: 错题库
   // ==========================================
+  // 选题篮状态
+  window._selectedErrors = {};
+  window._basketTopics = [];
+
   function renderErrors() {
     const container = document.getElementById('errorsContent');
     const students = DataManager.getStudents().students;
 
     let html = '<div class="section-title">📋 错题库</div>';
 
-    // 筛选栏
-    html += '<div class="card" style="display:flex;gap:8px;flex-wrap:wrap">';
+    // 筛选栏第一行
+    html += '<div class="card" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">';
     html += '<select class="form-select" id="errorStudentFilter" onchange="window._filterErrors()" style="flex:1;min-width:80px">';
     html += '<option value="all">全部孩子</option>';
     students.forEach(s => html += `<option value="${s.id}">${s.emoji} ${s.name}</option>`);
@@ -1189,83 +1193,332 @@
     html += '<option value="active">未掌握</option><option value="all">全部</option><option value="mastered">已掌握</option></select>';
     html += '</div>';
 
+    // 筛选栏第二行：知识点 + 错误类型
+    html += '<div class="card" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">';
+    html += '<select class="form-select" id="errorTopicFilter" onchange="window._filterErrors()" style="flex:2;min-width:120px;font-size:12px">';
+    html += '<option value="all">全部知识点</option></select>';
+    html += '<select class="form-select" id="errorTypeFilter" onchange="window._filterErrors()" style="flex:2;min-width:120px;font-size:12px">';
+    html += '<option value="all">全部错误类型</option>';
+    ['计算错误','概念不清','审题失误','方法错误','粗心大意','其他'].forEach(t => html += `<option value="${t}">${t}</option>`);
+    html += '</select>';
+    html += '</div>';
+
+    // 批量工具栏
+    html += '<div class="batch-toolbar" id="batchToolbar" style="display:none">';
+    html += '<label><input type="checkbox" id="selectAllErrors" onchange="window._toggleSelectAll(this.checked)"> 全选</label>';
+    html += '<button class="btn btn-sm btn-outline" onclick="window._batchMarkMastered()" style="font-size:11px;padding:4px 8px">✅ 标记已掌握</button>';
+    html += '<button class="btn btn-sm btn-outline" onclick="window._batchAddToBasket()" style="font-size:11px;padding:4px 8px;background:var(--primary-light);color:var(--primary)">📋 加入选题篮</button>';
+    html += '<button class="btn btn-sm btn-outline" onclick="window._batchClearSelection()" style="font-size:11px;padding:4px 8px">取消选择</button>';
+    html += '</div>';
+
+    // 选题篮（底部固定）
+    html += '<div class="selection-basket" id="selectionBasket">';
+    html += '<div class="basket-header"><span class="basket-title">📋 选题篮（<span id="basketCount">0</span>个知识点）</span>';
+    html += '<button class="btn btn-sm" style="font-size:11px;padding:2px 8px;background:none;color:var(--danger)" onclick="window._clearBasket()">🗑 清空</button></div>';
+    html += '<div class="basket-tags" id="basketTags"></div>';
+    html += '<div class="basket-actions">';
+    html += '<button class="btn btn-primary btn-sm" style="flex:1;font-size:12px" onclick="window._goToTestPaper()">📝 基于选题生成检测卷</button>';
+    html += '</div></div>';
+
     html += '<div id="errorList"></div>';
+
+    // 导出按钮
+    html += '<div style="text-align:center;padding:12px 0">';
+    html += '<button class="btn btn-outline btn-sm" onclick="window._exportErrorReport()">📥 导出错题报告（可打印）</button>';
+    html += '</div>';
 
     container.innerHTML = html;
     window._filterErrors();
+    window._updateBasketUI();
   }
 
   window._filterErrors = function() {
-    const studentFilter = document.getElementById('errorStudentFilter')?.value || 'all';
-    const subjectFilter = document.getElementById('errorSubjectFilter')?.value || 'all';
-    const statusFilter = document.getElementById('errorStatusFilter')?.value || 'active';
+    var studentFilter = (document.getElementById('errorStudentFilter') || {}).value || 'all';
+    var subjectFilter = (document.getElementById('errorSubjectFilter') || {}).value || 'all';
+    var statusFilter = (document.getElementById('errorStatusFilter') || {}).value || 'active';
+    var topicFilter = (document.getElementById('errorTopicFilter') || {}).value || 'all';
+    var typeFilter = (document.getElementById('errorTypeFilter') || {}).value || 'all';
 
-    const allErrors = [];
-    const students = DataManager.getStudents().students;
+    var allErrors = [];
+    var allTopics = {};
+    var students = DataManager.getStudents().students;
 
-    students.forEach(s => {
+    students.forEach(function(s) {
       if (studentFilter !== 'all' && s.id !== studentFilter) return;
-      DataManager.getErrors(s.id).forEach(e => {
+      DataManager.getErrors(s.id).forEach(function(e) {
         if (subjectFilter !== 'all' && e.subject !== subjectFilter) return;
         if (statusFilter === 'active' && e.mastered) return;
         if (statusFilter === 'mastered' && !e.mastered) return;
-        allErrors.push({ ...e, studentName: s.name, studentId: s.id, studentColor: s.color });
+
+        // 收集所有topic用于筛选下拉
+        if (e.topic) allTopics[e.topic] = (allTopics[e.topic] || 0) + 1;
+
+        // 知识点筛选
+        if (topicFilter !== 'all' && e.topic !== topicFilter) return;
+
+        // 错误类型筛选
+        if (typeFilter !== 'all') {
+          var types = e.errorTypes || [];
+          if (types.indexOf(typeFilter) < 0) return;
+        }
+
+        allErrors.push({
+          id: e.id, studentName: s.name, studentId: s.id, studentColor: s.color,
+          subject: e.subject, topic: e.topic, subTopic: e.subTopic,
+          questionText: e.questionText, wrongAnswer: e.wrongAnswer, correctAnswer: e.correctAnswer,
+          errorTypes: e.errorTypes || [], frequency: e.frequency || 1,
+          mastered: e.mastered || false, updatedAt: e.updatedAt
+        });
       });
     });
 
-    allErrors.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+    allErrors.sort(function(a, b) { return new Date(b.updatedAt) - new Date(a.updatedAt); });
 
-    const list = document.getElementById('errorList');
+    // 更新知识点下拉
+    var topicSelect = document.getElementById('errorTopicFilter');
+    if (topicSelect && topicSelect.options.length <= 1) {
+      var sortedTopics = Object.keys(allTopics).sort(function(a, b) { return allTopics[b] - allTopics[a]; });
+      sortedTopics.forEach(function(t) {
+        var opt = document.createElement('option');
+        opt.value = t; opt.textContent = t + ' (' + allTopics[t] + ')';
+        topicSelect.appendChild(opt);
+      });
+    }
+
+    // 渲染列表
+    var list = document.getElementById('errorList');
     if (!list) return;
 
     if (allErrors.length === 0) {
       list.innerHTML = '<div class="card"><div class="empty-state"><div class="empty-icon">🎉</div><div class="empty-text">没有符合条件的错题</div></div></div>';
+      document.getElementById('batchToolbar').style.display = 'none';
       return;
     }
 
-    let html = `<div class="card"><div class="card-title">共 ${allErrors.length} 道错题</div>`;
+    document.getElementById('batchToolbar').style.display = 'flex';
 
-    allErrors.forEach(e => {
-      const subjIcon = e.subject === '语文' ? '📖' : e.subject === '数学' ? '🔢' : '🌍';
-      const errorTypes = (e.errorTypes || []).join('、');
+    var html = '<div class="card"><div class="card-title" style="display:flex;justify-content:space-between"><span>共 ' + allErrors.length + ' 道错题</span><span style="font-size:12px;color:var(--text-light)">已选 <b id="selectedCount">0</b> 道</span></div>';
 
-      html += `
-      <div class="error-item ${e.mastered ? 'mastered' : ''}" style="border-left-color:${e.studentColor}">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start">
-          <div style="font-weight:600;font-size:14px">${subjIcon} ${e.topic}${e.subTopic !== e.topic ? ' · ' + e.subTopic : ''}</div>
-          <div style="display:flex;gap:4px;flex-shrink:0">
-            ${e.mastered ? '<span class="tag tag-green">已掌握</span>' : '<span class="tag tag-red">待攻克</span>'}
-            <span class="tag tag-gray">${e.frequency}次</span>
-          </div>
-        </div>
-        ${e.questionText ? `<div style="font-size:13px;color:var(--text-secondary);margin-top:4px">📝 ${e.questionText}</div>` : ''}
-        <div class="error-meta">
-          <span class="tag tag-red">✗ ${e.wrongAnswer || '?'}</span>
-          <span class="tag tag-green">✓ ${e.correctAnswer || '?'}</span>
-          <span class="tag tag-gray">${errorTypes}</span>
-        </div>
-        <div style="display:flex;gap:8px;margin-top:8px">
-          <button class="btn btn-sm btn-outline" onclick="window._toggleMastered('${e.studentId}','${e.id}',${!e.mastered})">${e.mastered ? '🔓 标记未掌握' : '✅ 标记已掌握'}</button>
-          <button class="btn btn-sm btn-outline" onclick="window._navTo('exercises','${e.studentId}:${e.subject}:${encodeURIComponent(e.topic)}')">✏️ 同类练习</button>
-        </div>
-      </div>`;
+    allErrors.forEach(function(e) {
+      var subjIcon = e.subject === '语文' ? '📖' : e.subject === '数学' ? '🔢' : '🌍';
+      var errorTypes = (e.errorTypes || []).join('、');
+      var errKey = e.studentId + '_' + e.id;
+      var checked = window._selectedErrors[errKey] ? ' checked' : '';
+
+      html += '<div class="error-item ' + (e.mastered ? 'mastered' : '') + '" style="border-left-color:' + e.studentColor + '">';
+      html += '<input type="checkbox" class="err-checkbox" data-errkey="' + errKey + '"' + checked + ' onchange="window._onErrorCheck(this)">';
+      html += '<div class="err-body">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:flex-start">';
+      html += '<div style="font-weight:600;font-size:14px">' + subjIcon + ' ' + e.topic + (e.subTopic !== e.topic ? ' · ' + e.subTopic : '') + ' <span style="font-size:11px;color:var(--text-light)">' + e.studentName + '</span></div>';
+      html += '<div style="display:flex;gap:4px;flex-shrink:0">';
+      html += (e.mastered ? '<span class="tag tag-green">已掌握</span>' : '<span class="tag tag-red">待攻克</span>');
+      html += '<span class="tag tag-gray">' + e.frequency + '次</span></div></div>';
+      if (e.questionText) html += '<div style="font-size:13px;color:var(--text-secondary);margin-top:4px">📝 ' + e.questionText + '</div>';
+      html += '<div class="error-meta">';
+      html += '<span class="tag tag-red">✗ ' + (e.wrongAnswer || '?') + '</span>';
+      html += '<span class="tag tag-green">✓ ' + (e.correctAnswer || '?') + '</span>';
+      html += '<span class="tag tag-gray">' + errorTypes + '</span></div>';
+      html += '<div style="display:flex;gap:6px;margin-top:6px">';
+      html += '<button class="btn btn-sm btn-outline" style="font-size:11px;padding:3px 8px" onclick="window._toggleMastered(\'' + e.studentId + '\',\'' + e.id + '\',' + (!e.mastered) + ')">' + (e.mastered ? '🔓' : '✅') + '</button>';
+      html += '<button class="btn btn-sm btn-outline" style="font-size:11px;padding:3px 8px" onclick="window._navTo(\'exercises\',\'' + e.studentId + ':' + e.subject + ':' + encodeURIComponent(e.topic) + '\')">✏️ 同类</button>';
+      html += '</div></div></div>';
     });
 
     html += '</div>';
     list.innerHTML = html;
+    window._updateSelectionCount();
   };
 
-  window._toggleMastered = function(studentId, errorId, mastered) {
-    const errors = DataManager.getErrors(studentId);
-    const e = errors.find(x => x.id === errorId);
-    if (e) {
-      e.mastered = mastered;
-      e.updatedAt = new Date().toISOString();
-      DataManager.saveErrors(studentId, errors);
-      DataManager.updateWeakpointsFromExams(studentId);
-      showToast(mastered ? '已标记为掌握 ✅' : '已标记为未掌握', 'success');
-      window._filterErrors();
+  // 全选/取消全选
+  window._toggleSelectAll = function(checked) {
+    var boxes = document.querySelectorAll('#errorList .err-checkbox');
+    boxes.forEach(function(cb) {
+      cb.checked = checked;
+      var key = cb.dataset.errkey;
+      if (checked) window._selectedErrors[key] = true;
+      else delete window._selectedErrors[key];
+    });
+    window._updateSelectionCount();
+  };
+
+  // 单个选择
+  window._onErrorCheck = function(cb) {
+    var key = cb.dataset.errkey;
+    if (cb.checked) window._selectedErrors[key] = true;
+    else delete window._selectedErrors[key];
+    window._updateSelectionCount();
+  };
+
+  // 清除选择
+  window._batchClearSelection = function() {
+    window._selectedErrors = {};
+    var boxes = document.querySelectorAll('#errorList .err-checkbox');
+    boxes.forEach(function(cb) { cb.checked = false; });
+    document.getElementById('selectAllErrors').checked = false;
+    window._updateSelectionCount();
+  };
+
+  // 更新选择计数
+  window._updateSelectionCount = function() {
+    var count = Object.keys(window._selectedErrors).length;
+    var el = document.getElementById('selectedCount');
+    if (el) el.textContent = count;
+  };
+
+  // 批量标记已掌握
+  window._batchMarkMastered = function() {
+    var keys = Object.keys(window._selectedErrors);
+    if (keys.length === 0) { showToast('请先选择错题', 'warning'); return; }
+
+    // 按学生分组
+    var byStudent = {};
+    keys.forEach(function(key) {
+      var parts = key.split('_');
+      var sid = parts[0];
+      var eid = parts.slice(1).join('_');
+      if (!byStudent[sid]) byStudent[sid] = [];
+      byStudent[sid].push(eid);
+    });
+
+    Object.keys(byStudent).forEach(function(sid) {
+      var errors = DataManager.getErrors(sid);
+      var ids = byStudent[sid];
+      var changed = false;
+      errors.forEach(function(e) {
+        if (ids.indexOf(e.id) >= 0 && !e.mastered) {
+          e.mastered = true;
+          e.updatedAt = new Date().toISOString();
+          changed = true;
+        }
+      });
+      if (changed) {
+        DataManager.saveErrors(sid, errors);
+        DataManager.updateWeakpointsFromExams(sid);
+      }
+    });
+
+    showToast('已标记 ' + keys.length + ' 道错题为已掌握 ✅', 'success');
+    window._batchClearSelection();
+    window._filterErrors();
+  };
+
+  // 加入选题篮
+  window._batchAddToBasket = function() {
+    var keys = Object.keys(window._selectedErrors);
+    if (keys.length === 0) { showToast('请先选择错题', 'warning'); return; }
+
+    // 收集选中错题的知识点
+    var addedCount = 0;
+    var currentBasket = window._basketTopics || [];
+    var existingKeys = {};
+    currentBasket.forEach(function(t) {
+      existingKeys[t.studentId + '|' + t.subject + '|' + t.topic] = t;
+    });
+
+    keys.forEach(function(key) {
+      var parts = key.split('_');
+      var sid = parts[0];
+      var eid = parts.slice(1).join('_');
+      var errors = DataManager.getErrors(sid);
+      var e = errors.find(function(x) { return x.id === eid; });
+      if (e) {
+        var bk = sid + '|' + e.subject + '|' + e.topic;
+        if (!existingKeys[bk]) {
+          existingKeys[bk] = { studentId: sid, subject: e.subject, topic: e.topic, count: 0 };
+          currentBasket.push(existingKeys[bk]);
+          addedCount++;
+        }
+        existingKeys[bk].count++;
+      }
+    });
+
+    window._basketTopics = currentBasket;
+    window._updateBasketUI();
+    showToast('已添加 ' + addedCount + ' 个知识点到选题篮 📋', 'success');
+    window._batchClearSelection();
+  };
+
+  // 更新选题篮UI
+  window._updateBasketUI = function() {
+    var basket = document.getElementById('selectionBasket');
+    var tagsEl = document.getElementById('basketTags');
+    var countEl = document.getElementById('basketCount');
+    var topics = window._basketTopics || [];
+
+    if (!basket || !tagsEl || !countEl) return;
+
+    if (topics.length === 0) {
+      basket.classList.remove('active');
+    } else {
+      basket.classList.add('active');
+      var html = '';
+      var subjIcons = { '数学': '🔢', '语文': '📖', '英语': '🌍' };
+      topics.forEach(function(t) {
+        var icon = subjIcons[t.subject] || '📝';
+        html += '<span class="basket-tag">' + icon + ' ' + t.subject + '·' + t.topic + ' (' + t.count + '题)</span>';
+      });
+      tagsEl.innerHTML = html;
+      countEl.textContent = topics.length;
     }
+  };
+
+  // 清空选题篮
+  window._clearBasket = function() {
+    window._basketTopics = [];
+    window._updateBasketUI();
+  };
+
+  // 从选题篮跳转到出卷
+  window._goToTestPaper = function() {
+    var topics = window._basketTopics || [];
+    if (topics.length === 0) { showToast('选题篮为空，请先选择错题加入', 'warning'); return; }
+    var sid = topics[0].studentId || 'qiyuan';
+    currentStudentId = sid;
+    navigateTo('exercises');
+    // 延迟切换到选题篮模式
+    setTimeout(function() {
+      var modeEl = document.getElementById('testMode');
+      if (modeEl) { modeEl.value = 'basket'; window._onTestModeChange(); }
+    }, 200);
+  };
+
+  // 导出错题报告
+  window._exportErrorReport = function() {
+    var studentFilter = (document.getElementById('errorStudentFilter') || {}).value || 'all';
+    var subjectFilter = (document.getElementById('errorSubjectFilter') || {}).value || 'all';
+    var typeFilter = (document.getElementById('errorTypeFilter') || {}).value || 'all';
+
+    var reportHtml = '<html><head><meta charset="UTF-8"><title>错题报告</title>';
+    reportHtml += '<style>body{font-family:sans-serif;padding:20px;font-size:14px}';
+    reportHtml += 'table{width:100%;border-collapse:collapse;margin-top:12px}';
+    reportHtml += 'th,td{border:1px solid #ddd;padding:8px;text-align:left;font-size:12px}';
+    reportHtml += 'th{background:#f5f5f5}';
+    reportHtml += '@media print{body{padding:0}button{display:none}}</style></head><body>';
+    reportHtml += '<h2>📋 错题报告</h2><p>导出时间：' + new Date().toLocaleString() + '</p>';
+    reportHtml += '<table><tr><th>学生</th><th>学科</th><th>知识点</th><th>题目</th><th>错误答案</th><th>正确答案</th><th>错误类型</th></tr>';
+
+    var students = DataManager.getStudents().students;
+    students.forEach(function(s) {
+      if (studentFilter !== 'all' && s.id !== studentFilter) return;
+      DataManager.getErrors(s.id).forEach(function(e) {
+        if (subjectFilter !== 'all' && e.subject !== subjectFilter) return;
+        if (typeFilter !== 'all') {
+          var types = e.errorTypes || [];
+          if (types.indexOf(typeFilter) < 0) return;
+        }
+        reportHtml += '<tr><td>' + s.name + '</td><td>' + e.subject + '</td><td>' + e.topic + '</td>';
+        reportHtml += '<td>' + (e.questionText || '') + '</td>';
+        reportHtml += '<td style="color:red">' + (e.wrongAnswer || '') + '</td>';
+        reportHtml += '<td style="color:green">' + (e.correctAnswer || '') + '</td>';
+        reportHtml += '<td>' + (e.errorTypes || []).join(', ') + '</td></tr>';
+      });
+    });
+
+    reportHtml += '</table><br><button onclick="window.print()">🖨 打印</button></body></html>';
+
+    var w = window.open('', '_blank');
+    w.document.write(reportHtml);
+    w.document.close();
   };
 
   // ==========================================
@@ -1400,23 +1653,57 @@
 
     <!-- 针对性测验卷 -->
     <div class="card" style="border:2px solid var(--primary);background:var(--primary-light)">
-      <div class="card-title">📝 生成完整测验卷</div>
-      <div style="font-size:12px;color:var(--text-secondary);margin-bottom:12px">
-        基于错题薄弱点，自动生成一份完整试卷，含分值分配和答题区域
+      <div class="card-title">📝 生成检测卷</div>
+
+      <!-- 出卷模式 -->
+      <div class="form-group"><label class="form-label">出卷方式</label>
+        <select class="form-select" id="testMode" onchange="window._onTestModeChange()">
+          <option value="auto">🎯 自动（基于薄弱点）</option>
+          <option value="basket">📋 选题篮出卷</option>
+          <option value="ai">🤖 AI智能出卷</option>
+        </select></div>
+
+      <!-- 选题篮知识点显示区 -->
+      <div id="basketTopicsArea" style="display:none;margin-bottom:12px">
+        <div style="font-size:12px;font-weight:600;margin-bottom:4px">📋 选题篮中的知识点：</div>
+        <div id="basketTopicTags" style="display:flex;gap:4px;flex-wrap:wrap"></div>
+        <div id="basketEmptyHint" style="font-size:12px;color:var(--text-light)">选题篮为空，请先到错题库选择错题加入选题篮</div>
       </div>
+
       <div class="form-group"><label class="form-label">学科</label>
         <select class="form-select" id="testSubject">`;
     s.subjects.forEach(subj => {
       html += `<option value="${subj}">${subj}</option>`;
     });
     html += `</select></div>
+
+      <div class="form-group"><label class="form-label">题量</label>
+        <select class="form-select" id="testQCount">
+          <option value="8">8题</option><option value="10" selected>10题</option>
+          <option value="12">12题</option><option value="15">15题</option><option value="20">20题</option>
+        </select></div>
+
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
         <div class="form-group"><label class="form-label">时间（分钟）</label>
           <select class="form-select" id="testTime"><option>30</option><option selected>45</option><option>60</option></select></div>
         <div class="form-group"><label class="form-label">总分</label>
           <select class="form-select" id="testTotal"><option value="50">50分</option><option value="100" selected>100分</option><option value="120">120分</option></select></div>
       </div>
-      <button class="btn btn-primary btn-block" onclick="window._generateTestPaper()" style="background:var(--primary);font-weight:700">📝 生成针对性测验卷</button>
+
+      <!-- AI模式额外设置 -->
+      <div id="aiModeOptions" style="display:none">
+        <div class="form-group"><label class="form-label">难度</label>
+          <select class="form-select" id="testDifficulty">
+            <option value="basic">🟢 基础巩固</option>
+            <option value="medium" selected>🟡 能力提升</option>
+            <option value="hard">🔴 拓展挑战</option>
+          </select></div>
+        <div class="form-group"><label class="form-label">额外要求（可选）</label>
+          <textarea class="form-input" id="testExtraPrompt" placeholder="如：重点考查异分母通分、增加一道应用题、题目要贴近日常生活..." rows="2" style="font-size:12px;resize:vertical"></textarea></div>
+      </div>
+
+      <button class="btn btn-primary btn-block" id="btnGenerateTest" onclick="window._generateTestPaper()" style="background:var(--primary);font-weight:700">📝 生成检测卷</button>
+      <div id="testGenStatus" style="margin-top:8px;font-size:12px"></div>
     </div>`;
 
     // 已生成的练习
@@ -1444,7 +1731,46 @@
 
     // 练习详情弹窗（默认隐藏）
     container.innerHTML += '<div class="modal-overlay" id="exerciseModal"></div>';
+
+    // 初始化选题篮显示
+    setTimeout(function() { window._onTestModeChange(); }, 100);
   }
+
+  // 出卷模式切换
+  window._onTestModeChange = function() {
+    var mode = (document.getElementById('testMode') || {}).value || 'auto';
+    var aiOpts = document.getElementById('aiModeOptions');
+    var basketArea = document.getElementById('basketTopicsArea');
+    var btn = document.getElementById('btnGenerateTest');
+
+    if (aiOpts) aiOpts.style.display = (mode === 'ai') ? 'block' : 'none';
+    if (basketArea) basketArea.style.display = (mode === 'basket') ? 'block' : 'none';
+
+    // 更新按钮文字
+    var labels = { auto: '📝 基于薄弱点生成', basket: '📋 基于选题篮生成', ai: '🤖 AI智能出卷' };
+    if (btn) btn.textContent = labels[mode] || labels.auto;
+
+    // 显示选题篮内容
+    if (mode === 'basket') {
+      var topics = window._basketTopics || [];
+      var tagsEl = document.getElementById('basketTopicTags');
+      var emptyEl = document.getElementById('basketEmptyHint');
+      if (tagsEl && emptyEl) {
+        if (topics.length === 0) {
+          tagsEl.innerHTML = '';
+          emptyEl.style.display = 'block';
+        } else {
+          emptyEl.style.display = 'none';
+          var subjIcons = { '数学': '🔢', '语文': '📖', '英语': '🌍' };
+          var html = '';
+          topics.forEach(function(t) {
+            html += '<span class="tag tag-blue" style="font-size:11px">' + (subjIcons[t.subject]||'') + ' ' + t.topic + '</span>';
+          });
+          tagsEl.innerHTML = html;
+        }
+      }
+    }
+  };
 
   window._selectExStudent = function(id) {
     currentStudentId = id;
@@ -1536,48 +1862,62 @@
     renderExercises();
   };
 
-  // ===== 生成针对性测验卷 =====
+  // ===== 生成检测卷（三种模式） =====
   window._generateTestPaper = function() {
-    var subject = document.getElementById('testSubject').value;
-    var time = parseInt(document.getElementById('testTime').value);
-    var totalScore = parseInt(document.getElementById('testTotal').value);
+    var mode = (document.getElementById('testMode') || {}).value || 'auto';
+    var subject = (document.getElementById('testSubject') || {}).value || '数学';
+    var time = parseInt((document.getElementById('testTime') || {}).value || '45');
+    var totalScore = parseInt((document.getElementById('testTotal') || {}).value || '100');
+    var questionCount = parseInt((document.getElementById('testQCount') || {}).value || '10');
     var studentId = currentStudentId || 'qiyuan';
     var student = DataManager.getStudent(studentId);
-    var errorStats = DataManager.getErrorStats(studentId);
-    var subjStats = errorStats.bySubject[subject];
+    var grade = student ? student.grade : 3;
 
-    // 获取薄弱知识点
-    var topics = subjStats.topics.filter(function(t) { return t.active > 0; });
-    if (topics.length === 0) {
-      // 没薄弱点就用全部知识点
-      var errors = DataManager.getErrors(studentId);
-      var subjErrors = errors.filter(function(e) { return e.subject === subject; });
-      var topicSet = {};
-      subjErrors.forEach(function(e) {
-        if (!topicSet[e.topic]) topicSet[e.topic] = { topic: e.topic, count: 0 };
-        topicSet[e.topic].count++;
-      });
-      topics = Object.values(topicSet).sort(function(a, b) { return b.count - a.count; });
-    }
-    // 兜底
-    if (topics.length === 0) {
-      topics = [{ topic: subject + '综合', active: 3 }];
+    if (mode === 'ai') {
+      // AI智能出卷
+      _generateAITestPaper(studentId, subject, grade, questionCount, time, totalScore);
+      return;
     }
 
-    // 取前5个薄弱点
-    var selectedTopics = topics.slice(0, 5);
-    var questionCount = Math.max(8, Math.floor(time / 5));
+    // 获取知识点
+    var selectedTopics;
+    if (mode === 'basket') {
+      var basket = window._basketTopics || [];
+      selectedTopics = basket.filter(function(t) { return t.subject === subject; }).map(function(t) { return { topic: t.topic, active: t.count }; });
+      if (selectedTopics.length === 0) {
+        showToast('选题篮中没有' + subject + '的知识点，请先到错题库选择', 'error');
+        return;
+      }
+    } else {
+      // auto模式：基于薄弱点
+      var errorStats = DataManager.getErrorStats(studentId);
+      var subjStats = errorStats.bySubject[subject];
+      selectedTopics = (subjStats && subjStats.topics) ? subjStats.topics.filter(function(t) { return t.active > 0; }) : [];
+      if (selectedTopics.length === 0) {
+        var errors = DataManager.getErrors(studentId);
+        var subjErrors = errors.filter(function(e) { return e.subject === subject; });
+        var topicSet = {};
+        subjErrors.forEach(function(e) {
+          if (!topicSet[e.topic]) topicSet[e.topic] = { topic: e.topic, count: 0 };
+          topicSet[e.topic].count++;
+        });
+        selectedTopics = Object.values(topicSet).sort(function(a, b) { return b.count - a.count; });
+      }
+      if (selectedTopics.length === 0) {
+        selectedTopics = [{ topic: subject + '综合', active: 3 }];
+      }
+      selectedTopics = selectedTopics.slice(0, 5);
+    }
+
+    // 模板出题（auto + basket）
     var easyCount = Math.floor(questionCount * 0.4);
     var mediumCount = Math.floor(questionCount * 0.4);
     var hardCount = questionCount - easyCount - mediumCount;
-
-    // 生成题目
     var questions = [];
+
     selectedTopics.forEach(function(t, ti) {
       var countForTopic = Math.ceil(questionCount / selectedTopics.length);
-      if (ti === selectedTopics.length - 1) {
-        countForTopic = questionCount - questions.length;
-      }
+      if (ti === selectedTopics.length - 1) countForTopic = questionCount - questions.length;
       if (countForTopic <= 0) return;
 
       for (var i = 0; i < countForTopic; i++) {
@@ -1598,21 +1938,90 @@
     // 总分配分调整
     var allocatedPoints = questions.reduce(function(s, q) { return s + q.points; }, 0);
     if (allocatedPoints !== totalScore && questions.length > 0) {
-      var adjustment = totalScore - allocatedPoints;
-      questions[questions.length - 1].points += adjustment;
+      questions[questions.length - 1].points += totalScore - allocatedPoints;
     }
 
-    // 保存为练习
+    _saveTestPaper(studentId, subject, time, totalScore, selectedTopics, questions, '模板出卷');
+  };
+
+  // AI智能出卷
+  function _generateAITestPaper(studentId, subject, grade, questionCount, time, totalScore) {
+    var difficulty = (document.getElementById('testDifficulty') || {}).value || 'medium';
+    var extraPrompt = (document.getElementById('testExtraPrompt') || {}).value || '';
+    var statusEl = document.getElementById('testGenStatus');
+    var btn = document.getElementById('btnGenerateTest');
+
+    // 收集知识点
+    var topics = [];
+    var basket = window._basketTopics || [];
+    basket.forEach(function(t) {
+      if (t.subject === subject) topics.push(t.topic);
+    });
+    if (topics.length === 0) {
+      // 从薄弱点获取
+      var errorStats = DataManager.getErrorStats(studentId);
+      var subjStats = errorStats.bySubject[subject];
+      if (subjStats && subjStats.topics) {
+        subjStats.topics.filter(function(t) { return t.active > 0; }).slice(0, 5).forEach(function(t) { topics.push(t.topic); });
+      }
+    }
+    if (topics.length === 0) topics.push(subject + '综合');
+
+    if (statusEl) statusEl.innerHTML = '<div class="alert alert-info">🤖 AI正在出卷，请稍候（约10-20秒）...</div>';
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ AI出卷中...'; }
+
+    var params = {
+      subject: subject,
+      grade: grade,
+      topics: topics,
+      questionCount: questionCount,
+      difficulty: difficulty,
+      totalScore: totalScore,
+      timeMinutes: time,
+      extraPrompt: extraPrompt
+    };
+
+    OCRHelper.generateTestPaper(params, function(result) {
+      if (btn) { btn.disabled = false; btn.textContent = '📝 生成检测卷'; }
+      if (!result.success) {
+        if (statusEl) statusEl.innerHTML = '<div class="alert alert-warning">⚠️ ' + (result.error || 'AI出卷失败') + '<br><small>请重试或切换为模板出卷</small></div>';
+        return;
+      }
+      if (statusEl) statusEl.innerHTML = '<div class="alert alert-success">✅ AI出卷完成！</div>';
+
+      var paper = result.paper;
+      var questions = [];
+      var topicNames = [];
+      (paper.sections || []).forEach(function(section) {
+        (section.questions || []).forEach(function(q) {
+          questions.push({
+            question: q.question,
+            answer: q.answer,
+            points: q.points || Math.round(totalScore / questionCount),
+            difficulty: section.name.indexOf('基础') >= 0 ? 'basic' : section.name.indexOf('挑战') >= 0 ? 'hard' : 'medium',
+            topic: topics[0] || subject
+          });
+          topicNames.push(topics[0] || subject);
+        });
+      });
+
+      var selectedTopics = topics.map(function(t) { return { topic: t }; });
+      _saveTestPaper(studentId, subject, time, totalScore, selectedTopics, questions, 'AI出卷');
+    });
+  }
+
+  // 保存检测卷公共函数
+  function _saveTestPaper(studentId, subject, time, totalScore, selectedTopics, questions, source) {
     var testPaper = {
       id: 'test_' + Date.now(),
       studentId: studentId,
       subject: subject,
-      topic: '针对性测验卷',
+      topic: '检测卷',
       type: 'test_paper',
       time: time,
       totalScore: totalScore,
       difficulty: 'medium',
-      difficultyLabel: '综合测验',
+      difficultyLabel: source || '综合测验',
       questions: questions,
       completed: false,
       score: null,
@@ -1626,10 +2035,10 @@
     exercises.push(testPaper);
     DataManager.saveExercises(studentId, exercises);
 
-    showToast('测验卷已生成！📝', 'success');
+    showToast('检测卷已生成！📝', 'success');
     renderExercises();
     setTimeout(function() { window._viewTestPaper(studentId, testPaper.id); }, 300);
-  };
+  }
 
   // 查看测验卷
   window._viewTestPaper = function(studentId, exerciseId) {
