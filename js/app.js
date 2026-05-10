@@ -394,16 +394,25 @@
     </div>
 
     <div class="card">
-      <div class="form-group"><label class="form-label">📷 试卷照片（拍照后对照录入）</label>
+      <div class="form-group"><label class="form-label">📷 试卷照片（支持多张试卷批量识别）</label>
         <div class="photo-upload" onclick="document.getElementById('photoInput').click()" id="photoUploadArea">
           <div class="upload-icon">📸</div>
-          <div class="upload-text">点击拍照留存试卷</div>
+          <div class="upload-text">点击拍照或选择多张试卷</div>
         </div>
-        <input type="file" id="photoInput" accept="image/*" capture="environment" style="display:none" onchange="window._handlePhotoUpload(event)">
+        <input type="file" id="photoInput" accept="image/*" multiple style="display:none" onchange="window._handlePhotoUpload(event)">
         <div id="photoPreviews" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px"></div>
+        <!-- 添加更多按钮 -->
+        <div id="addMoreArea" style="display:none;margin-top:8px;text-align:center">
+          <button class="btn btn-sm btn-outline" onclick="document.getElementById('photoInput').click()" style="font-size:13px">
+            📷 继续添加试卷照片
+          </button>
+          <button class="btn btn-sm btn-outline" onclick="window._clearAllPhotos()" style="font-size:13px;color:var(--danger);margin-left:6px">
+            🗑 清空全部
+          </button>
+        </div>
         <!-- 大图参照区 -->
         <div id="photoReference" style="display:none;margin-top:8px;text-align:center">
-          <div style="font-size:12px;color:var(--text-secondary);margin-bottom:4px">📷 对照照片，边看边录入</div>
+          <div style="font-size:12px;color:var(--text-secondary);margin-bottom:4px">📷 对照照片，边看边录入（点击缩略图切换）</div>
           <img id="refImage" style="max-width:100%;max-height:300px;border-radius:8px;border:1px solid var(--border)" />
         </div>
         <div id="ocrStatus" style="display:none;margin-top:8px"></div>
@@ -412,9 +421,9 @@
 
     <div style="text-align:center;padding:8px 0">
       <button class="btn btn-outline btn-block" id="btnOCR" onclick="window._runOCR(true)" disabled style="margin-bottom:6px">
-        🔍 DeepSeek AI识别（拍照后点击）
+        🔍 DeepSeek AI批量识别
       </button>
-      <small style="color:var(--text-light)">AI看图理解，手写/印刷均支持，自动填入全部信息</small>
+      <small style="color:var(--text-light)" id="ocrHint">选择多张试卷后点击识别，AI会逐张分析并合并结果</small>
     </div>
 
     <button class="btn btn-primary btn-block btn-lg" onclick="window._submitExam()">✅ 保存测验记录</button>`;
@@ -468,34 +477,112 @@
     renderExamEntry();
   };
 
-  // 照片上传 - 显示大图参照
+  // 初始化照片存储数组
+  window._photoImages = [];
+
+  // 照片上传 - 支持多张追加，显示大图参照
   window._handlePhotoUpload = function(event) {
     var files = event.target.files;
+    if (!files || files.length === 0) return;
+
     var previews = document.getElementById('photoPreviews');
     var refDiv = document.getElementById('photoReference');
     var refImg = document.getElementById('refImage');
     var uploadArea = document.getElementById('photoUploadArea');
+    var addMoreArea = document.getElementById('addMoreArea');
     var btnOCR = document.getElementById('btnOCR');
 
-    for (var i = 0; i < Math.min(files.length, 3); i++) {
+    var processed = 0;
+    var total = files.length;
+
+    for (var i = 0; i < files.length; i++) {
       (function(f) {
         var reader = new FileReader();
         reader.onload = function(e) {
+          processed++;
+          var base64 = e.target.result;
+
+          // 存入数组
+          window._photoImages.push(base64);
+
           // 小图预览
           var div = document.createElement('div');
           div.className = 'photo-preview';
-          div.innerHTML = '<img src="' + e.target.result + '" alt="试卷" onclick="window._showRef(this.src)"><button class="remove-btn" onclick="this.parentElement.remove();window._updateRef()">×</button>';
+          var idx = window._photoImages.length;
+          div.innerHTML = '<img src="' + base64 + '" alt="试卷' + idx + '" onclick="window._showRef(this.src)"><button class="remove-btn" onclick="window._removePhoto(' + (idx - 1) + ')">×</button>';
           previews.appendChild(div);
+
           // 显示大图参照
-          if (refImg) refImg.src = e.target.result;
+          if (refImg) refImg.src = base64;
           if (refDiv) refDiv.style.display = 'block';
+
+          // 收拢上传区域，显示添加更多
           if (uploadArea) uploadArea.style.display = 'none';
-          if (btnOCR) { btnOCR.disabled = false; }
+          if (addMoreArea) addMoreArea.style.display = 'block';
+          if (btnOCR) { btnOCR.disabled = false; updateOCRButtonLabel(); }
+
+          // 重置 input，允许重复选同一文件
+          if (processed === total) {
+            document.getElementById('photoInput').value = '';
+          }
         };
         reader.readAsDataURL(f);
       })(files[i]);
     }
   };
+
+  // 删除单张照片
+  window._removePhoto = function(index) {
+    window._photoImages.splice(index, 1);
+    // 重建预览
+    var previews = document.getElementById('photoPreviews');
+    previews.innerHTML = '';
+    window._photoImages.forEach(function(b64, i) {
+      var div = document.createElement('div');
+      div.className = 'photo-preview';
+      div.innerHTML = '<img src="' + b64 + '" alt="试卷' + (i + 1) + '" onclick="window._showRef(this.src)"><button class="remove-btn" onclick="window._removePhoto(' + i + ')">×</button>';
+      previews.appendChild(div);
+    });
+    window._updatePhotoUI();
+  };
+
+  // 清空全部照片
+  window._clearAllPhotos = function() {
+    window._photoImages = [];
+    document.getElementById('photoPreviews').innerHTML = '';
+    window._updatePhotoUI();
+  };
+
+  // 更新照片区域UI状态
+  window._updatePhotoUI = function() {
+    var previews = document.getElementById('photoPreviews');
+    var refDiv = document.getElementById('photoReference');
+    var uploadArea = document.getElementById('photoUploadArea');
+    var addMoreArea = document.getElementById('addMoreArea');
+    var btnOCR = document.getElementById('btnOCR');
+    var imgs = previews.querySelectorAll('img');
+
+    if (imgs.length === 0) {
+      if (refDiv) refDiv.style.display = 'none';
+      if (uploadArea) uploadArea.style.display = 'block';
+      if (addMoreArea) addMoreArea.style.display = 'none';
+      if (btnOCR) { btnOCR.disabled = true; btnOCR.textContent = '🔍 DeepSeek AI批量识别'; }
+    } else {
+      if (refDiv && refDiv.style.display !== 'block') {
+        refDiv.style.display = 'block';
+        document.getElementById('refImage').src = imgs[imgs.length - 1].src;
+      }
+      if (btnOCR) { btnOCR.disabled = false; updateOCRButtonLabel(); }
+    }
+  };
+
+  function updateOCRButtonLabel() {
+    var btn = document.getElementById('btnOCR');
+    var count = window._photoImages ? window._photoImages.length : 0;
+    if (btn && !btn.disabled) {
+      btn.textContent = '🔍 DeepSeek AI批量识别（' + count + '张试卷）';
+    }
+  }
 
   window._showRef = function(src) {
     var refImg = document.getElementById('refImage');
@@ -504,138 +591,134 @@
     if (refDiv) refDiv.style.display = 'block';
   };
 
-  window._updateRef = function() {
-    var previews = document.getElementById('photoPreviews');
-    var refDiv = document.getElementById('photoReference');
-    var uploadArea = document.getElementById('photoUploadArea');
-    var imgs = previews.querySelectorAll('img');
-    if (imgs.length === 0) {
-      if (refDiv) refDiv.style.display = 'none';
-      if (uploadArea) uploadArea.style.display = 'block';
-      if (btnOCR) btnOCR.disabled = true;
-    } else {
-      document.getElementById('refImage').src = imgs[imgs.length - 1].src;
-    }
-  };
-
-  // 检查照片状态
+  // 检查照片状态（兼容旧调用）
   window._checkOCRButton = function() {
-    var previews = document.getElementById('photoPreviews');
-    var btnOCR = document.getElementById('btnOCR');
-    if (btnOCR) btnOCR.disabled = !previews || previews.children.length === 0;
+    window._updatePhotoUI();
   };
 
-  // 运行OCR识别 - autoMode时自动批改填表
+  // 批量运行OCR识别 - 逐张处理多张试卷
   window._runOCR = function(autoMode) {
-    var previews = document.getElementById('photoPreviews');
-    var imgs = previews.querySelectorAll('img');
+    var images = window._photoImages;
     var statusEl = document.getElementById('ocrStatus');
     var btnOCR = document.getElementById('btnOCR');
 
-    if (imgs.length === 0) { showToast('请先拍照上传试卷', 'error'); return; }
+    if (!images || images.length === 0) { showToast('请先拍照或选择试卷', 'error'); return; }
 
     btnOCR.disabled = true;
-    btnOCR.textContent = '⏳ AI分析中...';
     statusEl.style.display = 'block';
-    statusEl.innerHTML = '<div class="alert alert-info">🤖 DeepSeek正在分析试卷图片，约5-10秒...</div>';
+    statusEl.innerHTML = '<div class="alert alert-info">🤖 DeepSeek正在批量分析 ' + images.length + ' 张试卷，请稍候...</div>';
 
-    var base64 = imgs[0].src;
+    // 累积结果
+    var allErrors = [];
+    var lastMeta = null;
+    var completedCount = 0;
+    var failCount = 0;
     var maxWidth = 1200;
+    var totalImages = images.length;
 
-    // 压缩图片
-    OCRHelper.compressImage(base64, maxWidth, 0.7, function(compressed) {
-      // 调用OCR API
-      OCRHelper.recognizeImage(compressed, function(result) {
-        btnOCR.disabled = false;
-        btnOCR.textContent = '🔍 智能识别试卷内容';
+    // 逐张处理
+    function processNext(index) {
+      if (index >= totalImages) {
+        // 全部完成
+        finishBatch();
+        return;
+      }
 
-        if (!result.success) {
-          statusEl.innerHTML = '<div class="alert alert-warning">⚠️ ' + (result.error || '识别失败') + '<br><small>请手动录入错题，或明日再试OCR（每日500次免费额度）</small></div>';
-          showToast('识别失败，请手动录入', 'error');
-          return;
-        }
+      statusEl.innerHTML = '<div class="alert alert-info">🤖 正在分析第 <b>' + (index + 1) + '</b> / ' + totalImages + ' 张试卷...</div>';
 
-        var ocrText = result.text;
+      OCRHelper.compressImage(images[index], maxWidth, 0.7, function(compressed) {
+        OCRHelper.recognizeImage(compressed, function(result) {
+          if (!result.success) {
+            failCount++;
+            completedCount++;
+            statusEl.innerHTML = '<div class="alert alert-info">🤖 正在分析第 <b>' + (index + 1) + '</b> / ' + totalImages + ' 张...（第' + index + '张识别失败，继续下一张）</div>';
+            processNext(index + 1);
+            return;
+          }
 
-        // DeepSeek返回结构化JSON
-        if (result.structured) {
-          var s = result.structured;
-          // 填入元数据
-          fillFormMeta({
-            subject: s.subject,
-            title: s.title,
-            examType: s.examType,
-            totalScore: s.totalScore,
-            actualScore: s.actualScore
-          });
+          // 处理结构化JSON结果
+          if (result.structured) {
+            var s = result.structured;
+            lastMeta = {
+              subject: s.subject || (lastMeta ? lastMeta.subject : ''),
+              title: s.title || (lastMeta ? lastMeta.title : ''),
+              examType: s.examType || (lastMeta ? lastMeta.examType : '单元测试'),
+              totalScore: s.totalScore || (lastMeta ? lastMeta.totalScore : 100),
+              actualScore: s.actualScore || (lastMeta ? lastMeta.actualScore : null)
+            };
 
-          // 填入错题
-          if (s.errors && s.errors.length > 0) {
-            clearErrorRows();
-            s.errors.forEach(function(e, i) {
-              window._addErrorRow();
-              var row = document.getElementById('errorRows').lastElementChild;
-              if (!row) return;
-              fillErrorRow(row, e, i);
-              // 填入正确答案和批改结果
-              var correctEl = row.querySelector('[name="errCorrect"]');
-              if (correctEl && e.correctAnswer) correctEl.value = e.correctAnswer;
-              // 添加分析
-              if (e.analysis) {
-                var div = document.createElement('div');
-                div.className = 'grading-analysis';
-                div.style.cssText = 'margin-top:8px;padding:8px;background:#FFF7E6;border-radius:6px;font-size:12px;line-height:1.5';
-                div.innerHTML = '<b>🤖 AI分析：</b>' + e.analysis + '<br><b>💡 建议：</b>' + (e.suggestion || '');
-                row.appendChild(div);
-              }
-            });
-            statusEl.innerHTML = '<div class="alert alert-success">✅ AI识别完成！已填入 ' + s.errors.length + ' 道错题，学科/' + (s.subject||'?') + ' 得分' + (s.actualScore||'?') + '分。核对后保存。</div>';
+            // 累积错题（用题号去重）
+            if (s.errors && s.errors.length > 0) {
+              var existingNos = {};
+              allErrors.forEach(function(e) { existingNos[e.questionNo] = true; });
+              s.errors.forEach(function(e) {
+                var key = (e.questionNo || '') + '_' + (e.questionText || '').substring(0, 10);
+                if (!existingNos[key]) {
+                  existingNos[key] = true;
+                  allErrors.push(e);
+                }
+              });
+            }
           } else {
-            statusEl.innerHTML = '<div class="alert alert-success">✅ AI识别完成！试卷得分' + (s.actualScore||'?') + '分，未发现错题。</div>';
+            // 纯文本兜底：跳过，批量模式下不做预览
+            failCount++;
           }
-          btnOCR.disabled = false;
-          btnOCR.textContent = '🔍 DeepSeek AI识别';
-          if (s.errors && s.errors.length > 0) {
-            document.getElementById('errorRows').scrollIntoView({ behavior: 'smooth' });
-          }
-          return;
-        }
 
-        // 纯文本模式兜底
-        if (!ocrText || ocrText.trim().length < 5) {
-          statusEl.innerHTML = '<div class="alert alert-warning">⚠️ 未识别到足够文字，请确认照片清晰</div>';
-          return;
-        }
-
-        var questions = OCRHelper.parseToQuestions(ocrText);
-        var metadata = OCRHelper.analyzeExamMetadata(ocrText);
-        window._ocrQuestions = questions;
-        window._ocrMetadata = metadata;
-
-        // 自动填入试卷元数据
-        fillFormMeta(metadata);
-
-        if (autoMode) {
-          // 自动模式：跳过预览，直接批改填表
-          window._fillAndGrade();
-          var studentId = currentStudentId || 'qiyuan';
-          var student = DataManager.getStudent(studentId);
-          statusEl.innerHTML = '<div class="alert alert-success">✅ 自动识别+批改完成！已填入 ' + questions.length + ' 题，请核对后保存</div>';
-        } else {
-          // 手动模式：显示预览
-          statusEl.innerHTML = '<div class="alert alert-success">✅ 识别成功！检测到 ' + questions.length + ' 道题目</div>';
-          var reviewEl = document.getElementById('ocrReview');
-          reviewEl.style.display = 'block';
-          reviewEl.innerHTML = '<div class="card"><div class="card-title">📋 识别结果</div>' +
-            '<div style="max-height:200px;overflow-y:auto;font-size:12px;color:var(--text-secondary);background:var(--bg);padding:12px;border-radius:8px;margin-bottom:12px;white-space:pre-wrap">' + escapeHtml(ocrText.substring(0, 800)) + '</div>' +
-            '<div class="btn-group" style="flex-direction:column;gap:8px">' +
-            '<button class="btn btn-primary btn-sm btn-block" onclick="window._fillAndGrade()">✅ 智能批改并填入</button>' +
-            '<button class="btn btn-outline btn-sm btn-block" onclick="window._fillOCRResults()">📝 仅填入不批改</button>' +
-            '<button class="btn btn-outline btn-sm btn-block" onclick="document.getElementById(\'ocrReview\').style.display=\'none\'">取消</button>' +
-            '</div></div>';
-        }
+          completedCount++;
+          processNext(index + 1);
+        });
       });
-    });
+    }
+
+    function finishBatch() {
+      btnOCR.disabled = false;
+      updateOCRButtonLabel();
+
+      if (allErrors.length === 0 && !lastMeta) {
+        statusEl.innerHTML = '<div class="alert alert-warning">⚠️ ' + totalImages + ' 张试卷均未识别到有效内容<br><small>请确认照片清晰或尝试单张拍照</small></div>';
+        showToast('全部识别失败，请手动录入', 'error');
+        return;
+      }
+
+      // 填入元数据
+      if (lastMeta) fillFormMeta(lastMeta);
+
+      // 填入错题
+      clearErrorRows();
+      if (allErrors.length > 0) {
+        allErrors.forEach(function(e, i) {
+          window._addErrorRow();
+          var row = document.getElementById('errorRows').lastElementChild;
+          if (!row) return;
+          fillErrorRow(row, e, i);
+          var correctEl = row.querySelector('[name="errCorrect"]');
+          if (correctEl && e.correctAnswer) correctEl.value = e.correctAnswer;
+          if (e.analysis) {
+            var div = document.createElement('div');
+            div.className = 'grading-analysis';
+            div.style.cssText = 'margin-top:8px;padding:8px;background:#FFF7E6;border-radius:6px;font-size:12px;line-height:1.5';
+            div.innerHTML = '<b>🤖 AI分析：</b>' + e.analysis + '<br><b>💡 建议：</b>' + (e.suggestion || '');
+            row.appendChild(div);
+          }
+        });
+      }
+
+      var msg = '✅ 批量识别完成！分析 ' + totalImages + ' 张试卷，';
+      msg += '成功 ' + (totalImages - failCount) + ' 张，';
+      if (failCount > 0) msg += '失败 ' + failCount + ' 张，';
+      msg += '识别 ' + allErrors.length + ' 道错题';
+      if (lastMeta && lastMeta.subject) msg += '（' + lastMeta.subject + '）';
+      msg += '。核对后保存。';
+
+      statusEl.innerHTML = '<div class="alert alert-success">' + msg + '</div>';
+
+      if (allErrors.length > 0) {
+        document.getElementById('errorRows').scrollIntoView({ behavior: 'smooth' });
+      }
+    }
+
+    // 开始处理
+    processNext(0);
   };
 
   // 填入OCR结果到错题表单
@@ -654,7 +737,8 @@
     });
 
     tryAutoFillScore();
-    document.getElementById('ocrReview').style.display = 'none';
+    var reviewEl = document.getElementById('ocrReview');
+    if (reviewEl) reviewEl.style.display = 'none';
     showToast('已填入 ' + questions.length + ' 道错题，请核对修改后保存', 'success');
     document.getElementById('errorRows').scrollIntoView({ behavior: 'smooth' });
   };
@@ -708,7 +792,8 @@
     });
 
     tryAutoFillScore();
-    document.getElementById('ocrReview').style.display = 'none';
+    var reviewEl2 = document.getElementById('ocrReview');
+    if (reviewEl2) reviewEl2.style.display = 'none';
 
     // 统计
     var correctCount = graded.filter(function(q) { return q.analysis === '答案正确！'; }).length;
