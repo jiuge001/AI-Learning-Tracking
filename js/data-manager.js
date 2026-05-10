@@ -124,20 +124,31 @@ const DataManager = (() => {
   }
 
   function saveExams(id, data) {
-    localStorage.setItem(_key('exams', id), JSON.stringify(data));
+    try {
+      localStorage.setItem(_key('exams', id), JSON.stringify(data));
+      console.log('[DataManager] saveExams 成功, key:', _key('exams', id), 'size:', JSON.stringify(data).length);
+    } catch(e) {
+      console.error('[DataManager] saveExams 失败', e.name, e.message);
+      throw e;
+    }
   }
 
   function addExam(id, exam) {
+    console.log('[DataManager] addExam 开始', id, exam.subject, exam.title, 'errors:', (exam.errors||[]).length);
     const exams = getExams(id);
     exam.id = exam.id || ('exam_' + Date.now());
     exam.createdAt = exam.createdAt || new Date().toISOString();
     exam.studentId = id;
     exams.push(exam);
+    console.log('[DataManager] saveExams, 共', exams.length, '条');
     saveExams(id, exams);
+    console.log('[DataManager] 处理错题...');
     // 自动处理错题
     _processErrorsFromExam(id, exam);
     // 更新薄弱点
+    console.log('[DataManager] 更新薄弱点...');
     updateWeakpointsFromExams(id);
+    console.log('[DataManager] addExam 完成');
     return exam;
   }
 

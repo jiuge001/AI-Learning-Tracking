@@ -991,13 +991,31 @@
 
   // 提交测验
   window._submitExam = function() {
-    var subject = document.getElementById('examSubject').value;
-    var title = document.getElementById('examTitle').value || subject + '测验';
-    var examType = document.getElementById('examType').value;
-    var total = parseInt(document.getElementById('examTotal').value) || 100;
-    var score = parseInt(document.getElementById('examScore').value);
-    var date = document.getElementById('examDate').value;
+    console.log('[保存] 开始保存...');
+
+    // 安全检查：DOM元素存在
+    var subjectEl = document.getElementById('examSubject');
+    var titleEl = document.getElementById('examTitle');
+    var typeEl = document.getElementById('examType');
+    var totalEl = document.getElementById('examTotal');
+    var scoreEl = document.getElementById('examScore');
+    var dateEl = document.getElementById('examDate');
+
+    if (!subjectEl || !scoreEl || !dateEl) {
+      console.error('[保存] 表单DOM缺失', {subjectEl, scoreEl, dateEl});
+      showToast('❌ 表单未加载，请返回重新进入录入页', 'error');
+      return;
+    }
+
+    var subject = subjectEl.value;
+    var title = titleEl ? (titleEl.value || subject + '测验') : (subject + '测验');
+    var examType = typeEl ? typeEl.value : '单元测试';
+    var total = parseInt(totalEl ? totalEl.value : '100') || 100;
+    var score = parseInt(scoreEl.value);
+    var date = dateEl.value;
     var sid = currentStudentId || 'qiyuan';
+
+    console.log('[保存] 数据', {subject, title, examType, total, score, date, sid});
 
     if (isNaN(score)) {
       showToast('请输入实际得分', 'error');
@@ -1012,6 +1030,8 @@
     var errors = [];
     var errorRows = document.getElementById('errorRows');
     var rows = errorRows ? errorRows.children : [];
+    console.log('[保存] 错题行数:', rows.length);
+
     for (var ri = 0; ri < rows.length; ri++) {
       var row = rows[ri];
       var qnoEl = row.querySelector('[name="errQno"]');
@@ -1019,14 +1039,14 @@
       var wrongEl = row.querySelector('[name="errWrong"]');
       var correctEl = row.querySelector('[name="errCorrect"]');
       var topicEl = row.querySelector('[name="errTopic"]');
-      var typeEl = row.querySelector('[name="errType"]');
+      var typeEl2 = row.querySelector('[name="errType"]');
 
       var qno = qnoEl ? qnoEl.value : '';
       var etext = textEl ? textEl.value : '';
       var wrong = wrongEl ? wrongEl.value : '';
       var correct = correctEl ? correctEl.value : '';
       var topic = topicEl ? topicEl.value : '';
-      var etype = typeEl ? typeEl.value : '计算错误';
+      var etype = typeEl2 ? typeEl2.value : '计算错误';
 
       if (topic || etext) {
         errors.push({
@@ -1043,74 +1063,83 @@
       }
     }
 
-    // 收集照片（压缩为缩略图，避免超出localStorage 5MB限制）
-    var images = [];
-    var previews = document.querySelectorAll('#photoPreviews img');
-    var allImages = window._photoImages || [];
-    var savedCount = 0;
-    var totalImages = Math.min(previews.length, allImages.length);
+    // 收集照片缩略图（异步压缩，失败不阻塞）
+    function doSave(thumbnails) {
+      var exam = {
+        subject: subject,
+        title: title,
+        examType: examType,
+        totalScore: total,
+        actualScore: score,
+        date: date,
+        errors: errors,
+        weakPoints: errors.map(function(e) { return e.topic; }),
+        images: thumbnails || []
+      };
 
-    function saveExam(thumbnails) {
-      var exam = { subject: subject, title: title, examType: examType, totalScore: total, actualScore: score, date: date, errors: errors, weakPoints: errors.map(function(e) { return e.topic; }), images: thumbnails };
+      console.log('[保存] 调用DataManager.addExam', sid, exam);
       try {
         DataManager.addExam(sid, exam);
+        console.log('[保存] DataManager.addExam 成功');
         showToast('✅ 测验保存成功！', 'success');
-        // 保存后自动触发备份下载（供坚果云同步）
         setTimeout(function() {
-          autoSaveBackup();
+          try { autoSaveBackup(); } catch(ignore) {}
         }, 500);
         navigateTo('dashboard');
       } catch(e) {
+        console.error('[保存] 错误', e.name, e.message);
         // localStorage满了：去掉图片重试
-        if (e.name === 'QuotaExceededError' || e.toString().indexOf('quota') > -1) {
+        if (e.name === 'QuotaExceededError' || (e.message && e.message.indexOf('quota') >= 0)) {
           try {
             exam.images = [];
             DataManager.addExam(sid, exam);
-            showToast('⚠️ 照片过大已跳过，测验数据已保存', 'warning');
-            setTimeout(function() { autoSaveBackup(); }, 500);
+            showToast('⚠️ 照片过大已跳过，数据已保存', 'warning');
+            setTimeout(function() { try { autoSaveBackup(); } catch(ignore) {} }, 500);
             navigateTo('dashboard');
           } catch(e2) {
-            showToast('❌ 存储空间不足，请导出备份后清理数据', 'error');
+            console.error('[保存] 二次保存失败', e2);
+            showToast('❌ 存储不足，请导出备份后清理', 'error');
           }
         } else {
-          showToast('❌ 保存失败：' + (e.message || '未知错误'), 'error');
+          showToast('❌ 保存失败：' + (e.message || e.name || '未知错误'), 'error');
         }
       }
     }
 
-    // 压缩图片为缩略图（300px宽，0.5质量，约5-15KB/张）
+    // 异步压缩图片，失败不阻塞保存
+    var allImages = window._photoImages || [];
     if (allImages.length > 0) {
-      // 等待所有缩略图生成
-      processImages(allImages, 0, [], function(thumbnails) {
-        saveExam(thumbnails);
+      compressToThumbnails(allImages, 0, [], function(thumbnails) {
+        doSave(thumbnails);
       });
     } else {
-      saveExam([]);
-    }
-
-    function processImages(srcList, idx, results, done) {
-      if (idx >= srcList.length) {
-        done(results);
-        return;
-      }
-      // 压缩为小缩略图
-      var img = new Image();
-      img.onload = function() {
-        var canvas = document.createElement('canvas');
-        var maxW = 300;
-        var w = img.width, h = img.height;
-        if (w > maxW) { h = Math.round(h * maxW / w); w = maxW; }
-        canvas.width = w; canvas.height = h;
-        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-        results.push(canvas.toDataURL('image/jpeg', 0.5));
-        processImages(srcList, idx + 1, results, done);
-      };
-      img.onerror = function() {
-        processImages(srcList, idx + 1, results, done);
-      };
-      img.src = srcList[idx];
+      doSave([]);
     }
   };
+
+  // 图片压缩辅助函数
+  function compressToThumbnails(srcList, idx, results, done) {
+    if (idx >= srcList.length) {
+      done(results);
+      return;
+    }
+    var img = new Image();
+    img.onload = function() {
+      var canvas = document.createElement('canvas');
+      var maxW = 300;
+      var w = img.width, h = img.height;
+      if (w > maxW) { h = Math.round(h * maxW / w); w = maxW; }
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      results.push(canvas.toDataURL('image/jpeg', 0.5));
+      compressToThumbnails(srcList, idx + 1, results, done);
+    };
+    img.onerror = function() {
+      // 图片加载失败，跳过
+      compressToThumbnails(srcList, idx + 1, results, done);
+    };
+    img.src = srcList[idx];
+  }
 
   // ==========================================
   //  页面4: 错题库
