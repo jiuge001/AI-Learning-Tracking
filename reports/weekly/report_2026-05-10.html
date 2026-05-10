@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>学习周报 2026-05-04 ~ 2026-05-10</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif; background: #f0f2f5; color: #1a1a2e; min-height: 100vh; padding: 24px; }
+  .container { max-width: 900px; margin: 0 auto; }
+
+  .header { text-align: center; margin-bottom: 32px; }
+  .header h1 { font-size: 28px; font-weight: 700; color: #1a1a2e; margin-bottom: 6px; }
+  .header .subtitle { font-size: 14px; color: #888; }
+  .week-badge { display: inline-block; background: linear-gradient(135deg, #667eea, #764ba2); color: white; padding: 4px 16px; border-radius: 20px; font-size: 13px; font-weight: 600; margin-bottom: 12px; }
+
+  .summary-bar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 28px; }
+  .summary-card { background: white; border-radius: 12px; padding: 16px; text-align: center; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+  .summary-card .num { font-size: 32px; font-weight: 700; }
+  .summary-card .label { font-size: 12px; color: #888; margin-top: 4px; }
+  .summary-card .num.green { color: #52c41a; }
+  .summary-card .num.blue { color: #4a90d9; }
+  .summary-card .num.orange { color: #fa8c16; }
+  .summary-card .num.red { color: #f5222d; }
+
+  .empty-state { text-align: center; padding: 48px 24px; background: white; border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); margin-bottom: 28px; }
+  .empty-state .icon { font-size: 48px; margin-bottom: 12px; }
+  .empty-state h3 { font-size: 16px; color: #333; margin-bottom: 8px; }
+  .empty-state p { font-size: 13px; color: #888; line-height: 1.6; }
+
+  .student-section { background: white; border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); margin-bottom: 20px; overflow: hidden; }
+  .student-header { display: flex; align-items: center; padding: 16px 20px; border-bottom: 1px solid #f0f0f0; }
+  .student-header .avatar { font-size: 28px; margin-right: 12px; }
+  .student-header .info h2 { font-size: 17px; font-weight: 600; }
+  .student-header .info .tag { font-size: 12px; color: #888; }
+  .student-body { padding: 16px 20px; }
+
+  .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px; }
+  .stat-item { background: #fafafa; border-radius: 8px; padding: 12px; text-align: center; }
+  .stat-item .val { font-size: 22px; font-weight: 700; }
+  .stat-item .val.blue { color: #4a90d9; }
+  .stat-item .val.green { color: #52c41a; }
+  .stat-item .val.orange { color: #fa8c16; }
+  .stat-item .key { font-size: 11px; color: #888; margin-top: 2px; }
+
+  .subject-scores { margin-bottom: 16px; }
+  .subject-scores h4 { font-size: 13px; color: #888; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px; }
+  .subject-row { display: flex; align-items: center; padding: 8px 0; border-bottom: 1px solid #f5f5f5; }
+  .subject-row:last-child { border-bottom: none; }
+  .subject-row .subj { font-size: 14px; font-weight: 500; width: 60px; color: #333; }
+  .subject-row .bar-wrap { flex: 1; height: 8px; background: #f0f0f0; border-radius: 4px; margin: 0 10px; overflow: hidden; }
+  .subject-row .bar { height: 100%; border-radius: 4px; }
+  .subject-row .bar.chinese { background: #f5222d; }
+  .subject-row .bar.math { background: #4a90d9; }
+  .subject-row .bar.english { background: #52c41a; }
+  .subject-row .score { font-size: 14px; font-weight: 700; width: 40px; text-align: right; }
+  .subject-row .no-data { font-size: 12px; color: #ccc; margin-left: 10px; }
+
+  .weakpoints h4 { font-size: 13px; color: #888; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px; }
+  .wp-list { display: flex; flex-direction: column; gap: 6px; }
+  .wp-item { display: flex; align-items: center; padding: 8px 10px; background: #fff7e6; border-radius: 6px; border-left: 3px solid #fa8c16; }
+  .wp-item .rank { font-size: 12px; font-weight: 700; color: #fa8c16; width: 20px; }
+  .wp-item .desc { font-size: 13px; color: #333; flex: 1; }
+  .wp-item .badge { font-size: 11px; background: #fff0cc; color: #d48806; padding: 2px 6px; border-radius: 4px; }
+  .wp-empty { font-size: 13px; color: #ccc; padding: 8px 0; }
+
+  .errors-summary { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 16px; }
+  .err-card { background: #fafafa; border-radius: 8px; padding: 12px; display: flex; align-items: center; gap: 10px; }
+  .err-card .icon { font-size: 24px; }
+  .err-card .info .val { font-size: 20px; font-weight: 700; }
+  .err-card .info .lbl { font-size: 11px; color: #888; }
+
+  .section-title { font-size: 14px; font-weight: 700; color: #333; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+  .section-title .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+
+  .suggestions { background: white; border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); padding: 20px; margin-bottom: 20px; }
+  .suggestions h3 { font-size: 15px; font-weight: 700; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+  .suggestions ul { list-style: none; }
+  .suggestions li { padding: 8px 0; font-size: 13px; color: #555; border-bottom: 1px solid #f5f5f5; display: flex; gap: 8px; }
+  .suggestions li:last-child { border-bottom: none; }
+  .suggestions li .bullet { color: #667eea; font-weight: 700; flex-shrink: 0; }
+
+  .parent-section { background: white; border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); padding: 20px; margin-bottom: 20px; }
+  .parent-tasks { display: flex; gap: 12px; }
+  .parent-card { flex: 1; background: #fafafa; border-radius: 8px; padding: 12px; text-align: center; }
+  .parent-card .avatar { font-size: 32px; margin-bottom: 4px; }
+  .parent-card .name { font-size: 14px; font-weight: 600; }
+  .parent-card .resp { font-size: 11px; color: #888; margin-top: 4px; }
+  .parent-card .count { font-size: 22px; font-weight: 700; color: #4a90d9; margin-top: 6px; }
+  .parent-card .count-label { font-size: 11px; color: #888; }
+
+  .footer { text-align: center; padding: 20px; font-size: 12px; color: #bbb; }
+
+  .git-status { display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: #f6ffed; border: 1px solid #b7eb8f; border-radius: 8px; margin-bottom: 20px; font-size: 13px; color: #52c41a; }
+  .git-status .icon { font-size: 16px; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="week-badge">第 19 周</div>
+    <h1>📚 学习周报</h1>
+    <div class="subtitle">2026-05-04 ~ 2026-05-10 · 齐芛 &amp; 齐芃</div>
+  </div>
+
+  <!-- Git Commit Status -->
+  <div class="git-status" id="gitStatus">
+    <span class="icon">⏳</span>
+    <span id="gitStatusText">正在提交到 Git...</span>
+  </div>
+
+  <!-- Summary Bar -->
+  <div class="summary-bar">
+    <div class="summary-card">
+      <div class="num blue">0</div>
+      <div class="label">本周测验次数</div>
+    </div>
+    <div class="summary-card">
+      <div class="num orange">0</div>
+      <div class="label">本周新增错题</div>
+    </div>
+    <div class="summary-card">
+      <div class="num green">0</div>
+      <div class="label">本周掌握错题</div>
+    </div>
+    <div class="summary-card">
+      <div class="num red">0</div>
+      <div class="label">薄弱点待加强</div>
+    </div>
+  </div>
+
+  <!-- Empty state note -->
+  <div class="empty-state">
+    <div class="icon">📝</div>
+    <h3>本周暂无测验记录</h3>
+    <p>本周（5月4日~5月10日）暂无测验数据。<br>请在 App 中完成每日练习和测验，下次周报将自动汇总成绩。</p>
+  </div>
+
+  <!-- 齐芛 Section -->
+  <div class="student-section">
+    <div class="student-header">
+      <div class="avatar">🌿</div>
+      <div class="info">
+        <h2>齐芛</h2>
+        <div class="tag">五年级 · 蓝色</div>
+      </div>
+    </div>
+    <div class="student-body">
+      <div class="stats-grid">
+        <div class="stat-item">
+          <div class="val blue">0</div>
+          <div class="key">本周测验</div>
+        </div>
+        <div class="stat-item">
+          <div class="val orange">0</div>
+          <div class="key">新增错题</div>
+        </div>
+        <div class="stat-item">
+          <div class="val green">0</div>
+          <div class="key">已掌握</div>
+        </div>
+      </div>
+
+      <div class="subject-scores">
+        <h4>各科成绩</h4>
+        <div class="subject-row">
+          <div class="subj">语文</div>
+          <div class="bar-wrap"><div class="bar chinese" style="width:0%"></div></div>
+          <div class="score">--</div>
+          <div class="no-data">暂无数据</div>
+        </div>
+        <div class="subject-row">
+          <div class="subj">数学</div>
+          <div class="bar-wrap"><div class="bar math" style="width:0%"></div></div>
+          <div class="score">--</div>
+          <div class="no-data">暂无数据</div>
+        </div>
+        <div class="subject-row">
+          <div class="subj">英语</div>
+          <div class="bar-wrap"><div class="bar english" style="width:0%"></div></div>
+          <div class="score">--</div>
+          <div class="no-data">暂无数据</div>
+        </div>
+      </div>
+
+      <div class="weakpoints">
+        <h4>本周薄弱点 TOP3</h4>
+        <div class="wp-list">
+          <div class="wp-empty">暂无薄弱点数据，请先完成测验</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 齐芃 Section -->
+  <div class="student-section">
+    <div class="student-header">
+      <div class="avatar">🌱</div>
+      <div class="info">
+        <h2>齐芃</h2>
+        <div class="tag">三年级 · 绿色</div>
+      </div>
+    </div>
+    <div class="student-body">
+      <div class="stats-grid">
+        <div class="stat-item">
+          <div class="val blue">0</div>
+          <div class="key">本周测验</div>
+        </div>
+        <div class="stat-item">
+          <div class="val orange">0</div>
+          <div class="key">新增错题</div>
+        </div>
+        <div class="stat-item">
+          <div class="val green">0</div>
+          <div class="key">已掌握</div>
+        </div>
+      </div>
+
+      <div class="subject-scores">
+        <h4>各科成绩</h4>
+        <div class="subject-row">
+          <div class="subj">语文</div>
+          <div class="bar-wrap"><div class="bar chinese" style="width:0%"></div></div>
+          <div class="score">--</div>
+          <div class="no-data">暂无数据</div>
+        </div>
+        <div class="subject-row">
+          <div class="subj">数学</div>
+          <div class="bar-wrap"><div class="bar math" style="width:0%"></div></div>
+          <div class="score">--</div>
+          <div class="no-data">暂无数据</div>
+        </div>
+        <div class="subject-row">
+          <div class="subj">英语</div>
+          <div class="bar-wrap"><div class="bar english" style="width:0%"></div></div>
+          <div class="score">--</div>
+          <div class="no-data">暂无数据</div>
+        </div>
+      </div>
+
+      <div class="weakpoints">
+        <h4>本周薄弱点 TOP3</h4>
+        <div class="wp-list">
+          <div class="wp-empty">暂无薄弱点数据，请先完成测验</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 下周建议 -->
+  <div class="suggestions">
+    <h3>💡 下周学习建议</h3>
+    <ul>
+      <li><span class="bullet">1.</span><strong>齐芛（五年级）</strong>：数学建议加强分数运算和应用题理解，语文重点练习阅读理解和作文结构，英语坚持每日单词背诵。</li>
+      <li><span class="bullet">2.</span><strong>齐芛（五年级）</strong>：本周暂无数据，建议每天完成 10 道数学练习题，巩固计算能力。</li>
+      <li><span class="bullet">3.</span><strong>齐芛（五年级）</strong>：英语可尝试分级阅读，选择适合年级的英文绘本，提升语感。</li>
+      <li><span class="bullet">4.</span><strong>齐芃（三年级）</strong>：数学建议加强乘除法运算速度和准确性，语文重点练习看图写话。</li>
+      <li><span class="bullet">5.</span><strong>齐芃（三年级）</strong>：本周暂无数据，建议建立每日学习习惯，从每天 5 道计算题开始。</li>
+      <li><span class="bullet">6.</span><strong>共管建议</strong>：两位家长可分别负责不同科目，爸爸负责数学辅导，妈妈负责语文和英语，共建学习记录。</li>
+      <li><span class="bullet">7.</span><strong>下周目标</strong>：争取每个孩子每天完成至少一次练习，系统将自动积累数据生成更精准的周报。</li>
+    </ul>
+  </div>
+
+  <!-- 家长共管 -->
+  <div class="parent-section">
+    <div class="section-title">
+      <span class="dot" style="background:#4a90d9"></span>
+      家长共管任务
+    </div>
+    <div class="parent-tasks">
+      <div class="parent-card">
+        <div class="avatar">👨</div>
+        <div class="name">爸爸</div>
+        <div class="resp">负责：数学</div>
+        <div class="count">0</div>
+        <div class="count-label">本周任务完成</div>
+      </div>
+      <div class="parent-card">
+        <div class="avatar">👩</div>
+        <div class="name">妈妈</div>
+        <div class="resp">负责：语文、英语</div>
+        <div class="count">0</div>
+        <div class="count-label">本周任务完成</div>
+      </div>
+    </div>
+    <div style="margin-top: 12px; font-size: 13px; color: #888; text-align: center;">
+      当前共管任务为空，可通过 App 分配每日陪读任务
+    </div>
+  </div>
+
+  <div class="footer">
+    学习跟踪 PWA · 生成于 2026-05-10 09:00 · 下周自动更新
+  </div>
+</div>
+
+<script>
+  // Auto-update git status via message
+  window.addEventListener('load', function() {
+    // The git commit/push result will be shown by the system
+    // This page is rendered statically; real-time updates handled by parent
+  });
+</script>
+</body>
+</html>
