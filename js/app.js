@@ -421,7 +421,7 @@
 
     <div style="text-align:center;padding:8px 0">
       <button class="btn btn-outline btn-block" id="btnOCR" onclick="window._runOCR(true)" disabled style="margin-bottom:6px">
-        🔍 DeepSeek AI批量识别
+        🔍 千问AI批量识别
       </button>
       <small style="color:var(--text-light)" id="ocrHint">选择多张试卷后点击识别，AI会逐张分析并合并结果</small>
     </div>
@@ -566,7 +566,7 @@
       if (refDiv) refDiv.style.display = 'none';
       if (uploadArea) uploadArea.style.display = 'block';
       if (addMoreArea) addMoreArea.style.display = 'none';
-      if (btnOCR) { btnOCR.disabled = true; btnOCR.textContent = '🔍 DeepSeek AI批量识别'; }
+      if (btnOCR) { btnOCR.disabled = true; btnOCR.textContent = '🔍 千问AI批量识别'; }
     } else {
       if (refDiv && refDiv.style.display !== 'block') {
         refDiv.style.display = 'block';
@@ -580,7 +580,7 @@
     var btn = document.getElementById('btnOCR');
     var count = window._photoImages ? window._photoImages.length : 0;
     if (btn && !btn.disabled) {
-      btn.textContent = '🔍 DeepSeek AI批量识别（' + count + '张试卷）';
+      btn.textContent = '🔍 千问AI批量识别（' + count + '张试卷）';
     }
   }
 
@@ -606,7 +606,7 @@
 
     btnOCR.disabled = true;
     statusEl.style.display = 'block';
-    statusEl.innerHTML = '<div class="alert alert-info">🤖 DeepSeek正在批量分析 ' + images.length + ' 张试卷，请稍候...</div>';
+    statusEl.innerHTML = '<div class="alert alert-info">🤖 千问AI正在批量分析 ' + images.length + ' 张试卷，请稍候...</div>';
 
     // 累积结果
     var allErrors = [];

@@ -1,15 +1,15 @@
 /**
- * OCR辅助模块 - DeepSeek多模态识别
- * 发送试卷图片给AI，直接返回结构化数据
+ * OCR辅助模块 - 通义千问多模态识别
+ * 发送试卷图片给千问qwen-vl-max，直接返回结构化数据
  */
 window.OCRHelper = (function() {
   'use strict';
 
-  var API_KEY = 'sk-3db412fd4f2c43bda6c57fd491ab2e65';
-  var API_URL = 'https://api.deepseek.com/chat/completions';
+  var API_KEY = 'sk-9a5f8c41690e4ac5b04b44f73849fe52';
+  var API_URL = 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions';
 
   /**
-   * 识别试卷——发送图片给DeepSeek，获取结构化结果
+   * 识别试卷——发送图片给千问，获取结构化结果
    */
   function recognizeImage(base64Image, callback) {
     var prompt = [
@@ -48,7 +48,7 @@ window.OCRHelper = (function() {
         'Authorization': 'Bearer ' + API_KEY
       },
       body: JSON.stringify({
-        model: 'deepseek-chat',
+        model: 'qwen-vl-max',
         messages: [
           { role: 'system', content: '你是一个专业的K12教育助手，擅长分析小学生试卷。只返回JSON，不要解释。' },
           {
