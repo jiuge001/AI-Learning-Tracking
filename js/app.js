@@ -426,7 +426,8 @@
       <small style="color:var(--text-light)" id="ocrHint">选择多张试卷后点击识别，AI会逐张分析并合并结果</small>
     </div>
 
-    <button class="btn btn-primary btn-block btn-lg" onclick="window._submitExam()">✅ 保存测验记录</button>
+    <button class="btn btn-primary btn-block btn-lg" id="btnSubmitExam" onclick="window._submitExam()">✅ 保存测验记录</button>
+    <div id="debugLog" style="display:none;margin-top:8px;padding:8px;background:#1a1a2e;color:#0f0;font-family:monospace;font-size:11px;border-radius:8px;max-height:200px;overflow-y:auto;white-space:pre-wrap;line-height:1.4"></div>
 
     <div style="text-align:center;padding:12px 0;border-top:1px solid var(--border);margin-top:12px">
       <small style="color:var(--text-secondary);display:block;margin-bottom:6px">💡 保存后自动下载备份，放入坚果云 data/ 文件夹即可跨设备同步</small>
@@ -989,9 +990,25 @@
     showToast('分析完成：' + correctCount + '题正确，' + (graded.length - correctCount) + '题需注意 ✅', 'success');
   };
 
+  // 页面内调试日志（手机无需开控制台）
+  window._debugLog = function(msg) {
+    console.log(msg);
+    var el = document.getElementById('debugLog');
+    if (!el) return;
+    el.style.display = 'block';
+    var time = new Date().toLocaleTimeString();
+    el.textContent = (el.textContent ? el.textContent + '\n' : '') + '[' + time + '] ' + msg;
+    el.scrollTop = el.scrollHeight;
+  };
+
+  window._clearDebug = function() {
+    var el = document.getElementById('debugLog');
+    if (el) { el.style.display = 'none'; el.textContent = ''; }
+  };
+
   // 提交测验
   window._submitExam = function() {
-    console.log('[保存] 开始保存...');
+    window._debugLog('=== 开始保存 ===');
 
     // 安全检查：DOM元素存在
     var subjectEl = document.getElementById('examSubject');
@@ -1002,8 +1019,8 @@
     var dateEl = document.getElementById('examDate');
 
     if (!subjectEl || !scoreEl || !dateEl) {
-      console.error('[保存] 表单DOM缺失', {subjectEl, scoreEl, dateEl});
-      showToast('❌ 表单未加载，请返回重新进入录入页', 'error');
+      window._debugLog('错误: 表单DOM缺失 subject=' + !!subjectEl + ' score=' + !!scoreEl + ' date=' + !!dateEl);
+      showToast('表单未加载，请返回重新进入', 'error');
       return;
     }
 
@@ -1015,13 +1032,15 @@
     var date = dateEl.value;
     var sid = currentStudentId || 'qiyuan';
 
-    console.log('[保存] 数据', {subject, title, examType, total, score, date, sid});
+    window._debugLog('科目=' + subject + ' 得分=' + score + ' 日期=' + date + ' 学生=' + sid);
 
     if (isNaN(score)) {
+      window._debugLog('错误: 得分无效');
       showToast('请输入实际得分', 'error');
       return;
     }
     if (!date) {
+      window._debugLog('错误: 日期为空');
       showToast('请选择测验日期', 'error');
       return;
     }
@@ -1030,7 +1049,7 @@
     var errors = [];
     var errorRows = document.getElementById('errorRows');
     var rows = errorRows ? errorRows.children : [];
-    console.log('[保存] 错题行数:', rows.length);
+    window._debugLog('错题行数=' + rows.length);
 
     for (var ri = 0; ri < rows.length; ri++) {
       var row = rows[ri];
@@ -1050,66 +1069,74 @@
 
       if (topic || etext) {
         errors.push({
-          questionNo: qno || '',
-          questionText: etext || '',
-          topic: topic || '未分类',
-          subTopic: topic || '未分类',
+          questionNo: qno || '', questionText: etext || '',
+          topic: topic || '未分类', subTopic: topic || '未分类',
           errorType: etype || '计算错误',
-          wrongAnswer: wrong,
-          correctAnswer: correct,
-          analysis: '',
-          difficulty: '中等'
+          wrongAnswer: wrong, correctAnswer: correct,
+          analysis: '', difficulty: '中等'
         });
       }
     }
+    window._debugLog('有效错题=' + errors.length);
 
-    // 收集照片缩略图（异步压缩，失败不阻塞）
+    // 收集照片缩略图（异步，失败不阻塞）
     function doSave(thumbnails) {
       var exam = {
-        subject: subject,
-        title: title,
-        examType: examType,
-        totalScore: total,
-        actualScore: score,
-        date: date,
+        subject: subject, title: title, examType: examType,
+        totalScore: total, actualScore: score, date: date,
         errors: errors,
         weakPoints: errors.map(function(e) { return e.topic; }),
         images: thumbnails || []
       };
 
-      console.log('[保存] 调用DataManager.addExam', sid, exam);
+      window._debugLog('调用DataManager.addExam, examSize=' + JSON.stringify(exam).length + '字节');
+      
+      if (typeof DataManager === 'undefined') {
+        window._debugLog('错误: DataManager未定义!');
+        showToast('系统错误：DataManager未加载', 'error');
+        return;
+      }
+      if (typeof DataManager.addExam !== 'function') {
+        window._debugLog('错误: DataManager.addExam不是函数! type=' + typeof DataManager.addExam);
+        showToast('系统错误：保存方法异常', 'error');
+        return;
+      }
+
       try {
         DataManager.addExam(sid, exam);
-        console.log('[保存] DataManager.addExam 成功');
-        showToast('✅ 测验保存成功！', 'success');
+        window._debugLog('保存成功!');
+        showToast('✅ 保存成功！', 'success');
         setTimeout(function() {
           try { autoSaveBackup(); } catch(ignore) {}
         }, 500);
         navigateTo('dashboard');
       } catch(e) {
-        console.error('[保存] 错误', e.name, e.message);
-        // localStorage满了：去掉图片重试
+        window._debugLog('异常: ' + (e.name || '') + ' ' + (e.message || ''));
         if (e.name === 'QuotaExceededError' || (e.message && e.message.indexOf('quota') >= 0)) {
           try {
             exam.images = [];
             DataManager.addExam(sid, exam);
+            window._debugLog('去除图片后保存成功');
             showToast('⚠️ 照片过大已跳过，数据已保存', 'warning');
             setTimeout(function() { try { autoSaveBackup(); } catch(ignore) {} }, 500);
             navigateTo('dashboard');
           } catch(e2) {
-            console.error('[保存] 二次保存失败', e2);
+            window._debugLog('二次保存也失败: ' + (e2.name||'') + ' ' + (e2.message||''));
             showToast('❌ 存储不足，请导出备份后清理', 'error');
           }
         } else {
-          showToast('❌ 保存失败：' + (e.message || e.name || '未知错误'), 'error');
+          showToast('❌ 保存失败: ' + (e.message || e.name || '未知'), 'error');
         }
       }
     }
 
-    // 异步压缩图片，失败不阻塞保存
+    // 异步压缩图片
     var allImages = window._photoImages || [];
+    window._debugLog('图片数量=' + allImages.length);
     if (allImages.length > 0) {
+      window._debugLog('开始压缩图片...');
       compressToThumbnails(allImages, 0, [], function(thumbnails) {
+        window._debugLog('压缩完成=' + thumbnails.length + '张');
         doSave(thumbnails);
       });
     } else {
@@ -2300,6 +2327,8 @@
     });
 
     // 注册PWA安装事件
+    console.log('[学习跟踪] 版本 2026-05-10-v3 已加载');
+    document.getElementById('headerTitle').dataset.version = 'v3';
     window.addEventListener('beforeinstallprompt', (e) => {
       // 可以在合适时机触发安装提示
     });
