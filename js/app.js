@@ -426,7 +426,16 @@
       <small style="color:var(--text-light)" id="ocrHint">选择多张试卷后点击识别，AI会逐张分析并合并结果</small>
     </div>
 
-    <button class="btn btn-primary btn-block btn-lg" onclick="window._submitExam()">✅ 保存测验记录</button>`;
+    <button class="btn btn-primary btn-block btn-lg" onclick="window._submitExam()">✅ 保存测验记录</button>
+
+    <div style="text-align:center;padding:12px 0;border-top:1px solid var(--border);margin-top:12px">
+      <small style="color:var(--text-secondary);display:block;margin-bottom:6px">💡 保存后自动下载备份，放入坚果云 data/ 文件夹即可跨设备同步</small>
+      <div style="display:flex;gap:6px;justify-content:center">
+        <button class="btn btn-sm btn-outline" onclick="DataManager.downloadBackup()">💾 手动备份</button>
+        <button class="btn btn-sm btn-outline" onclick="window._forceSync()">☁️ 云端同步</button>
+        <button class="btn btn-sm btn-outline" onclick="document.getElementById('importFileInput').click()">📥 导入备份</button>
+      </div>
+    </div>`;
 
     container.innerHTML = html;
 
@@ -844,6 +853,42 @@
     return div.innerHTML;
   }
 
+  // ===== 自动备份 & 坚果云同步 =====
+  function autoSaveBackup() {
+    try {
+      var json = DataManager.exportAllData();
+      var blob = new Blob([json], { type: 'application/json' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = 'shared-backup.json';
+      a.click();
+      URL.revokeObjectURL(url);
+      // 提示用户放入坚果云
+      setTimeout(function() {
+        showToast('💾 备份已下载，请放入坚果云 data/ 文件夹同步到其他设备', 'info');
+      }, 1000);
+    } catch(e) {
+      // 静默失败，不影响主流程
+    }
+  }
+
+  // 强制同步（从云端拉取）
+  window._forceSync = function() {
+    showToast('☁️ 正在从云端同步...', 'info');
+    DataManager.syncFromCloud(function(result) {
+      if (result.success) {
+        showToast(result.message || '同步完成', result.updated ? 'success' : 'info');
+        if (result.updated) {
+          // 刷新仪表盘
+          navigateTo('dashboard');
+        }
+      } else {
+        showToast('⚠️ ' + (result.message || '同步失败'), 'warning');
+      }
+    });
+  };
+
   function fillFormMeta(meta) {
     if (!meta) return;
     var map = {
@@ -998,18 +1043,73 @@
       }
     }
 
-    // 收集照片
+    // 收集照片（压缩为缩略图，避免超出localStorage 5MB限制）
     var images = [];
     var previews = document.querySelectorAll('#photoPreviews img');
-    for (var pi = 0; pi < previews.length; pi++) {
-      images.push(previews[pi].src);
+    var allImages = window._photoImages || [];
+    var savedCount = 0;
+    var totalImages = Math.min(previews.length, allImages.length);
+
+    function saveExam(thumbnails) {
+      var exam = { subject: subject, title: title, examType: examType, totalScore: total, actualScore: score, date: date, errors: errors, weakPoints: errors.map(function(e) { return e.topic; }), images: thumbnails };
+      try {
+        DataManager.addExam(sid, exam);
+        showToast('✅ 测验保存成功！', 'success');
+        // 保存后自动触发备份下载（供坚果云同步）
+        setTimeout(function() {
+          autoSaveBackup();
+        }, 500);
+        navigateTo('dashboard');
+      } catch(e) {
+        // localStorage满了：去掉图片重试
+        if (e.name === 'QuotaExceededError' || e.toString().indexOf('quota') > -1) {
+          try {
+            exam.images = [];
+            DataManager.addExam(sid, exam);
+            showToast('⚠️ 照片过大已跳过，测验数据已保存', 'warning');
+            setTimeout(function() { autoSaveBackup(); }, 500);
+            navigateTo('dashboard');
+          } catch(e2) {
+            showToast('❌ 存储空间不足，请导出备份后清理数据', 'error');
+          }
+        } else {
+          showToast('❌ 保存失败：' + (e.message || '未知错误'), 'error');
+        }
+      }
     }
 
-    var exam = { subject: subject, title: title, examType: examType, totalScore: total, actualScore: score, date: date, errors: errors, weakPoints: errors.map(function(e) { return e.topic; }), images: images };
-    DataManager.addExam(sid, exam);
+    // 压缩图片为缩略图（300px宽，0.5质量，约5-15KB/张）
+    if (allImages.length > 0) {
+      // 等待所有缩略图生成
+      processImages(allImages, 0, [], function(thumbnails) {
+        saveExam(thumbnails);
+      });
+    } else {
+      saveExam([]);
+    }
 
-    showToast('测验录入成功！✅', 'success');
-    navigateTo('dashboard');
+    function processImages(srcList, idx, results, done) {
+      if (idx >= srcList.length) {
+        done(results);
+        return;
+      }
+      // 压缩为小缩略图
+      var img = new Image();
+      img.onload = function() {
+        var canvas = document.createElement('canvas');
+        var maxW = 300;
+        var w = img.width, h = img.height;
+        if (w > maxW) { h = Math.round(h * maxW / w); w = maxW; }
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        results.push(canvas.toDataURL('image/jpeg', 0.5));
+        processImages(srcList, idx + 1, results, done);
+      };
+      img.onerror = function() {
+        processImages(srcList, idx + 1, results, done);
+      };
+      img.src = srcList[idx];
+    }
   };
 
   // ==========================================
