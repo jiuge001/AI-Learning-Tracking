@@ -412,9 +412,9 @@
 
     <div style="text-align:center;padding:8px 0">
       <button class="btn btn-outline btn-block" id="btnOCR" onclick="window._runOCR(true)" disabled style="margin-bottom:6px">
-        🔍 腾讯云手写识别（拍照后点击）
+        🔍 DeepSeek AI识别（拍照后点击）
       </button>
-      <small style="color:var(--text-light)">手写体/印刷体均支持，识别后可自动填入</small>
+      <small style="color:var(--text-light)">AI看图理解，手写/印刷均支持，自动填入全部信息</small>
     </div>
 
     <button class="btn btn-primary btn-block btn-lg" onclick="window._submitExam()">✅ 保存测验记录</button>`;
@@ -535,9 +535,9 @@
     if (imgs.length === 0) { showToast('请先拍照上传试卷', 'error'); return; }
 
     btnOCR.disabled = true;
-    btnOCR.textContent = '⏳ 识别中...';
+    btnOCR.textContent = '⏳ AI分析中...';
     statusEl.style.display = 'block';
-    statusEl.innerHTML = '<div class="alert alert-info">🔍 正在智能识别试卷，自动批改中...</div>';
+    statusEl.innerHTML = '<div class="alert alert-info">🤖 DeepSeek正在分析试卷图片，约5-10秒...</div>';
 
     var base64 = imgs[0].src;
     var maxWidth = 1200;
@@ -556,6 +556,52 @@
         }
 
         var ocrText = result.text;
+
+        // DeepSeek返回结构化JSON
+        if (result.structured) {
+          var s = result.structured;
+          // 填入元数据
+          fillFormMeta({
+            subject: s.subject,
+            title: s.title,
+            examType: s.examType,
+            totalScore: s.totalScore,
+            actualScore: s.actualScore
+          });
+
+          // 填入错题
+          if (s.errors && s.errors.length > 0) {
+            clearErrorRows();
+            s.errors.forEach(function(e, i) {
+              window._addErrorRow();
+              var row = document.getElementById('errorRows').lastElementChild;
+              if (!row) return;
+              fillErrorRow(row, e, i);
+              // 填入正确答案和批改结果
+              var correctEl = row.querySelector('[name="errCorrect"]');
+              if (correctEl && e.correctAnswer) correctEl.value = e.correctAnswer;
+              // 添加分析
+              if (e.analysis) {
+                var div = document.createElement('div');
+                div.className = 'grading-analysis';
+                div.style.cssText = 'margin-top:8px;padding:8px;background:#FFF7E6;border-radius:6px;font-size:12px;line-height:1.5';
+                div.innerHTML = '<b>🤖 AI分析：</b>' + e.analysis + '<br><b>💡 建议：</b>' + (e.suggestion || '');
+                row.appendChild(div);
+              }
+            });
+            statusEl.innerHTML = '<div class="alert alert-success">✅ AI识别完成！已填入 ' + s.errors.length + ' 道错题，学科/' + (s.subject||'?') + ' 得分' + (s.actualScore||'?') + '分。核对后保存。</div>';
+          } else {
+            statusEl.innerHTML = '<div class="alert alert-success">✅ AI识别完成！试卷得分' + (s.actualScore||'?') + '分，未发现错题。</div>';
+          }
+          btnOCR.disabled = false;
+          btnOCR.textContent = '🔍 DeepSeek AI识别';
+          if (s.errors && s.errors.length > 0) {
+            document.getElementById('errorRows').scrollIntoView({ behavior: 'smooth' });
+          }
+          return;
+        }
+
+        // 纯文本模式兜底
         if (!ocrText || ocrText.trim().length < 5) {
           statusEl.innerHTML = '<div class="alert alert-warning">⚠️ 未识别到足够文字，请确认照片清晰</div>';
           return;
